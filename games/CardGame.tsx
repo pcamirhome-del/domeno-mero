@@ -202,7 +202,7 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
         {/* UI Overlay */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
             <button onClick={() => onEndGame(false, 0)} className="bg-red-500/20 text-red-200 p-2 rounded-full"><XCircle/></button>
-            <button onClick={hasAutoPlay ? () => setIsAutoPlaying(!isAutoPlaying) : buyAutoPlay} className={`p-2 rounded-full ${isAutoPlaying ? 'bg-green-500' : 'bg-slate-600'}`}>
+            <button onClick={hasAutoPlay ? () => setIsAutoPlaying(!isAutoPlaying) : buyAutoPlay} className={`p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500' : 'bg-slate-600') : 'bg-orange-500'}`}>
                 <Zap className="text-white" size={20}/>
             </button>
             <button onClick={() => setShowEmotes(!showEmotes)} className="p-2 bg-slate-700 rounded-full text-yellow-400"><Smile size={20}/></button>

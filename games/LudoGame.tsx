@@ -401,6 +401,17 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                              ))}
                          </div>
                      </div>
+                     <div>
+                         <h3 className="text-yellow-400 mb-2 font-bold">سمات الملعب</h3>
+                         <div className="grid grid-cols-2 gap-2">
+                             {BOARD_THEMES.map(s => (
+                                 <div key={s.id} className="p-2 rounded border border-slate-600 flex justify-between items-center">
+                                     <span>{s.name}</span>
+                                     <button onClick={() => buyItem(s.cost, () => setActiveBoardSkin(s))} className="bg-blue-600 px-2 py-1 rounded text-xs">شراء ({s.cost})</button>
+                                 </div>
+                             ))}
+                         </div>
+                     </div>
                  </div>
              )}
 

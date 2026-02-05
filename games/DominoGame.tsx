@@ -309,7 +309,8 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
       if (isGift) {
           setFloatingEmote({ char: emote, type: 'gift', target: 'opponent' });
       } else {
-          setFloatingEmote({ char: emote, type: soundType || 'emoji' });
+          // Send to "boneyard" area
+          setFloatingEmote({ char: emote, type: soundType || 'emoji', target: 'boneyard' });
       }
 
       const msg: ChatMessage = { 
@@ -319,7 +320,9 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
           type: isGift ? 'gift' : (isVoice ? 'voice_emoji' : 'emoji') 
       };
       setChatMessages(prev => [...prev, msg]);
-      setTimeout(() => setFloatingEmote(null), 2500);
+      
+      // Auto fade floating emote
+      setTimeout(() => setFloatingEmote(null), 2000);
   };
 
   // Visual Effect for Loss
@@ -338,8 +341,8 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
             </div>
         )}
 
-        {/* Top Bar */}
-        <div className="flex justify-between items-center bg-slate-800/80 p-2 rounded-xl mb-2 backdrop-blur-sm border border-white/10 z-20 mx-2 mt-2">
+        {/* Header - Opponent Info & Controls */}
+        <div className="flex justify-between items-center bg-slate-800/80 p-2 rounded-xl mb-1 backdrop-blur-sm border border-white/10 z-20 mx-2 mt-2">
             <div className="flex items-center gap-3 relative">
                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-xl font-bold border-2 border-white shadow-lg">
                      {opponentName.charAt(0)}
@@ -373,72 +376,95 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
             </div>
         </div>
 
-        {/* Board */}
-        <div className="flex-1 flex items-center justify-center overflow-hidden relative z-0 p-4">
-             <div ref={boardRef} className="billiard-table w-full h-full flex items-center overflow-x-auto overflow-y-hidden shadow-2xl relative">
-                 {gameState.board.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-white/30 text-2xl font-bold pointer-events-none">انتظر النقلة الأولى...</div>}
-                 <div className="flex items-center m-auto space-x-1 space-x-reverse px-12 min-w-max"> 
-                    {gameState.board.map((tile) => (
-                         <DominoTile key={tile.id} left={tile.left} right={tile.right} orientation={tile.isDouble ? 'vertical' : 'horizontal'} size="md" highlight={lastPlayedTile === tile.id} />
-                    ))}
+        {/* Main Game Area */}
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative z-0">
+             
+             {/* Left: Boneyard & Deck Info (Desktop) or Top (Mobile) */}
+             <div className="w-full md:w-32 bg-slate-800/50 p-2 flex md:flex-col gap-2 items-center justify-center border-r border-white/5 relative">
+                 <div className="text-slate-400 text-xs text-center font-bold mb-1">المخزون</div>
+                 <div className="bg-black/40 p-3 rounded-lg border border-white/10 flex md:flex-col gap-1 flex-wrap justify-center relative min-h-[60px]">
+                     {gameState.deck.map((_, i) => (
+                         <div key={i} className="w-4 h-8 bg-slate-300 rounded-[2px] border border-slate-500 shadow-sm"></div>
+                     ))}
+                     {gameState.deck.length === 0 && <span className="text-xs text-slate-500">فارغ</span>}
+                     
+                     {/* Boneyard Emote Target */}
+                     {floatingEmote?.target === 'boneyard' && (
+                         <div className="absolute inset-0 flex items-center justify-center text-6xl animate-ping z-50 pointer-events-none">
+                             {floatingEmote.char}
+                         </div>
+                     )}
                  </div>
-            </div>
+             </div>
+
+             {/* Center: Board */}
+             <div className="flex-1 flex items-center justify-center overflow-hidden relative bg-[#0f392b] border-[12px] border-[#3e2723] rounded-lg m-2 shadow-inner">
+                 <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/felt.png')] pointer-events-none"></div>
+                 <div ref={boardRef} className="w-full h-full flex items-center overflow-x-auto overflow-y-hidden shadow-2xl relative z-10 px-12">
+                     {gameState.board.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-white/30 text-2xl font-bold pointer-events-none">انتظر النقلة الأولى...</div>}
+                     <div className="flex items-center m-auto space-x-1 space-x-reverse px-12 min-w-max"> 
+                        {gameState.board.map((tile) => (
+                             <DominoTile key={tile.id} left={tile.left} right={tile.right} orientation={tile.isDouble ? 'vertical' : 'horizontal'} size="md" highlight={lastPlayedTile === tile.id} />
+                        ))}
+                     </div>
+                 </div>
+             </div>
         </div>
 
-        {/* Player Area */}
-        <div className="mt-2 flex flex-col gap-2 z-20">
-             <div className="bg-slate-800/90 p-3 rounded-t-2xl border-t border-white/10 backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
-                 <div className="flex justify-between items-center mb-2">
-                     <div className="flex items-center gap-2">
-                         <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold border border-white">
-                             {user.name.charAt(0)}
-                         </div>
-                         <div className="text-sm font-bold text-white">{user.name}</div>
+        {/* Player Hand & Chat Area */}
+        <div className="bg-slate-800/90 p-3 rounded-t-2xl border-t border-white/10 backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-20">
+             <div className="flex justify-between items-center mb-2">
+                 <div className="flex items-center gap-2">
+                     <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold border border-white">
+                         {user.name.charAt(0)}
                      </div>
-                     <div className="text-xs text-yellow-400 flex items-center gap-1">
-                         <Clock size={12} /> {gameState.currentTurn === 'human' ? gameState.timeLeft : '--'}
-                     </div>
+                     <div className="text-sm font-bold text-white">{user.name}</div>
                  </div>
-
-                 <div className="flex overflow-x-auto gap-2 pb-2 min-h-[80px] items-center">
-                     {gameState.players.human.hand.map(tile => {
-                         const valid = getValidMoves([tile], gameState.boardEnds.left, gameState.boardEnds.right).length > 0 || gameState.board.length === 0;
-                         return (
-                            <div key={tile.id}>
-                                <DominoTile 
-                                    left={tile.left} 
-                                    right={tile.right} 
-                                    isDouble={tile.isDouble}
-                                    size="sm"
-                                    disabled={gameState.currentTurn !== 'human' || isAutoPlaying || (!valid && gameState.board.length > 0)}
-                                    highlight={valid && gameState.currentTurn === 'human' && !isAutoPlaying}
-                                    onClick={() => handleUserPlay(tile)}
-                                />
-                            </div>
-                         );
-                     })}
+                 <div className="text-xs text-yellow-400 flex items-center gap-1">
+                     <Clock size={12} /> {gameState.currentTurn === 'human' ? gameState.timeLeft : '--'}
                  </div>
-
-                 {/* Controls */}
-                 <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 flex bg-slate-900 rounded-full px-3 py-1 items-center border border-slate-700">
-                          <input className="bg-transparent border-none outline-none text-white text-sm flex-1" placeholder="اكتب رسالة..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChat(chatInput)} />
-                          <button onClick={() => sendChat(chatInput)} className="text-emerald-400"><Send size={16}/></button>
-                      </div>
-                      <button onClick={() => setShowEmotes(!showEmotes)} className="bg-slate-700 p-2 rounded-full text-yellow-400 hover:bg-slate-600">
-                          <Smile size={20} />
-                      </button>
-                 </div>
-
-                 {/* Emote Menu */}
-                 {showEmotes && (
-                     <div className="absolute bottom-16 right-4 bg-slate-800 border border-slate-600 rounded-xl p-2 grid grid-cols-4 gap-2 shadow-2xl z-50 animate-in zoom-in slide-in-from-bottom-5">
-                         {['😀','👍','👋','❤️'].map(e => <button key={e} onClick={() => sendEmote(e, false)} className="text-2xl hover:scale-125 transition-transform">{e}</button>)}
-                         <button onClick={() => sendEmote('🤣', true, 'laugh')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>🤣</button>
-                         <button onClick={() => sendEmote('🌹', false, undefined, true)} className="text-2xl bg-red-900/50 rounded">🌹</button>
-                     </div>
-                 )}
              </div>
+
+             <div className="flex overflow-x-auto gap-2 pb-2 min-h-[80px] items-center">
+                 {gameState.players.human.hand.map(tile => {
+                     const valid = getValidMoves([tile], gameState.boardEnds.left, gameState.boardEnds.right).length > 0 || gameState.board.length === 0;
+                     return (
+                        <div key={tile.id}>
+                            <DominoTile 
+                                left={tile.left} 
+                                right={tile.right} 
+                                isDouble={tile.isDouble}
+                                size="sm"
+                                disabled={gameState.currentTurn !== 'human' || isAutoPlaying || (!valid && gameState.board.length > 0)}
+                                highlight={valid && gameState.currentTurn === 'human' && !isAutoPlaying}
+                                onClick={() => handleUserPlay(tile)}
+                            />
+                        </div>
+                     );
+                 })}
+             </div>
+
+             {/* Controls & Chat */}
+             <div className="flex items-center gap-2 mt-2">
+                  <div className="flex-1 flex bg-slate-900 rounded-full px-3 py-1 items-center border border-slate-700">
+                      <input className="bg-transparent border-none outline-none text-white text-sm flex-1" placeholder="اكتب رسالة..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChat(chatInput)} />
+                      <button onClick={() => sendChat(chatInput)} className="text-emerald-400"><Send size={16}/></button>
+                  </div>
+                  <button onClick={() => setShowEmotes(!showEmotes)} className="bg-slate-700 p-2 rounded-full text-yellow-400 hover:bg-slate-600">
+                      <Smile size={20} />
+                  </button>
+             </div>
+
+             {/* Emote Menu */}
+             {showEmotes && (
+                 <div className="absolute bottom-16 right-4 bg-slate-800 border border-slate-600 rounded-xl p-2 grid grid-cols-4 gap-2 shadow-2xl z-50 animate-in zoom-in slide-in-from-bottom-5">
+                     {['😀','👍','👋','❤️'].map(e => <button key={e} onClick={() => sendEmote(e, false)} className="text-2xl hover:scale-125 transition-transform">{e}</button>)}
+                     <button onClick={() => sendEmote('🤣', true, 'laugh')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>🤣</button>
+                     <button onClick={() => sendEmote('😡', true, 'angry')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>😡</button>
+                     <button onClick={() => sendEmote('💋', true, 'kiss')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>💋</button>
+                     <button onClick={() => sendEmote('🌹', false, undefined, true)} className="text-2xl bg-red-900/50 rounded">🌹</button>
+                 </div>
+             )}
         </div>
 
         {/* Exit Confirmation Modal */}

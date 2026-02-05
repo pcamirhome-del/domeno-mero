@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, PlayerType, Property } from '../types';
-import { XCircle, Dices, Building2, Coins, ArrowRight } from 'lucide-react';
+import { XCircle, Dices, Building2, Coins, ArrowRight, Zap } from 'lucide-react';
 import { playSound } from '../sounds';
 
 interface BankGameProps {
@@ -49,16 +49,20 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
     const [message, setMessage] = useState('ابدأ اللعب!');
     const [showBuyModal, setShowBuyModal] = useState<Property | null>(null);
     const [isRolling, setIsRolling] = useState(false);
+    const [hasAutoPlay, setHasAutoPlay] = useState(false);
+    const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     
     // Constants
     const PASS_GO_REWARD = 200;
 
-    // Bot Turn Effect
+    // AutoPlay & Bot Turn Effect
     useEffect(() => {
         if (turn === 'computer' && !players.computer.isBankrupt && isBot) {
             setTimeout(handleRoll, 1500);
+        } else if (turn === 'human' && !players.human.isBankrupt && isAutoPlaying && !showBuyModal) {
+            setTimeout(handleRoll, 1500);
         }
-    }, [turn, isBot]);
+    }, [turn, isBot, isAutoPlaying, showBuyModal]);
 
     const handleRoll = () => {
         if (isRolling) return;
@@ -137,17 +141,17 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
             if (tile.owner === null) {
                 // Available to buy
                 if (player.money >= tile.price) {
-                    if (playerKey === 'human') {
-                        // Show Modal
+                    if (playerKey === 'human' && !isAutoPlaying) {
+                        // Show Modal for manual player
                         setMessage(`هل تريد شراء ${tile.name} بـ ${tile.price}؟`);
                         setShowBuyModal(tile);
                         return; // Wait for user decision
                     } else {
-                        // Bot Logic: Buy if has > 200 left after purchase
+                        // Bot Logic OR AutoPlay: Buy if has > 200 left after purchase
                         if (player.money >= tile.price + 200) {
-                            buyProperty('computer', tile);
+                            buyProperty(playerKey, tile);
                         } else {
-                            finishTurn('computer', 'الكمبيوتر لم يشتري');
+                            finishTurn(playerKey, `${playerKey === 'human' ? 'أنت' : 'الكمبيوتر'} لم يشتري`);
                         }
                     }
                 } else {
@@ -175,8 +179,6 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
 
     const payRent = (payerKey: 'human' | 'computer', amount: number) => {
         const receiverKey = payerKey === 'human' ? 'computer' : 'human';
-        
-        // Simplified transfer (ignoring bankruptcy checks for intermediate step to keep brief)
         setPlayers(prev => ({
             ...prev,
             [payerKey]: { ...prev[payerKey], money: prev[payerKey].money - amount },
@@ -194,10 +196,6 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
     const finishTurn = (currentPlayer: string, msg: string) => {
         setMessage(msg);
         
-        // Check Bankruptcy
-        // NOTE: We rely on players state in the next render, but for immediate check we might need refs or timeouts.
-        // We will check bankruptcy at start of next turn cycle or here via timeout.
-        
         setTimeout(() => {
             setPlayers(prev => {
                 if (prev.human.money < 0) {
@@ -214,6 +212,13 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
                 return prev;
             });
         }, 1500);
+    };
+
+    const buyAutoPlay = () => {
+        if(confirm('شراء اللعب التلقائي بـ 200 عملة؟')) {
+            setHasAutoPlay(true);
+            setIsAutoPlaying(true);
+        }
     };
 
     // --- Rendering ---
@@ -278,10 +283,10 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
             <div className="flex-1 flex items-center justify-center">
                 <div className="relative w-full max-w-[500px] aspect-square bg-slate-900 border-4 border-slate-700 rounded-lg shadow-2xl p-1">
                      {/* Center Area */}
-                     <div className="absolute inset-[18%] bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center">
+                     <div className="absolute inset-[18%] bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center relative">
                          <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 mb-4">بنك الحظ</h2>
                          
-                         {turn === 'human' && !isRolling && !showBuyModal && (
+                         {turn === 'human' && !isRolling && !showBuyModal && !isAutoPlaying && (
                              <button 
                                 onClick={handleRoll}
                                 className="bg-gradient-to-r from-blue-600 to-blue-500 hover:scale-105 transition-transform px-8 py-3 rounded-full font-bold shadow-lg flex items-center gap-2"
@@ -294,6 +299,14 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
                          )}
 
                          <div className="mt-6 text-6xl font-black text-white">{dice > 0 ? dice : ''}</div>
+                         
+                         {/* Auto Play Button */}
+                        <button 
+                            onClick={hasAutoPlay ? () => setIsAutoPlaying(!isAutoPlaying) : buyAutoPlay}
+                            className={`absolute bottom-4 right-4 p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse' : 'bg-slate-600') : 'bg-orange-500'}`}
+                        >
+                            <Zap size={20} className="text-white"/>
+                        </button>
                      </div>
 
                      {/* Grid Placement - Absolute positioning for loop */}

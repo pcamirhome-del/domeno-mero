@@ -4,7 +4,7 @@ import { DominoGame } from './games/DominoGame';
 import { CardGame } from './games/CardGame';
 import { LudoGame } from './games/LudoGame';
 import { BankGame } from './games/BankGame';
-import { User, Play, Users, LogIn, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, TrendingUp, RefreshCw, Settings, Volume2, VolumeX, Smartphone, Trash2, Save, Heart, X } from 'lucide-react';
+import { User, Play, Users, LogIn, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, TrendingUp, RefreshCw, Settings, Volume2, VolumeX, Smartphone, Trash2, Save, Heart, X, Youtube } from 'lucide-react';
 import { playSound } from './sounds';
 
 const App: React.FC = () => {
@@ -48,6 +48,39 @@ const App: React.FC = () => {
       if (confirm('هل أنت متأكد من حذف الحساب؟ سيتم فقد جميع البيانات.')) {
           localStorage.removeItem('mir_domino_user');
           window.location.reload();
+      }
+  };
+
+  // --- Reward Ads Logic ---
+  const giveReward = (amount: number) => {
+      const newUser = { ...user, globalCoins: user.globalCoins + amount };
+      setUser(newUser);
+      localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
+      alert("مبروك! تمت إضافة " + amount + " عملة لرصيدك. رصيدك الحالي: " + newUser.globalCoins);
+      playSound('win');
+  };
+
+  const launchRewardedAd = () => {
+      // محاكاة انتهاء الإعلان بنجاح
+      // في الواقع، AdMob يرسل تنبيهاً عندما يكمل المستخدم المشاهدة
+      // Using 'any' to bypass TS check for global adsbygoogle
+      if (typeof (window as any).adsbygoogle !== 'undefined' || true) { // Always allow simulation for now to show UI working
+          alert("جاري تحميل الإعلان... (سيظهر الإعلان هنا بمجرد قبول حسابك)");
+          
+          setTimeout(() => {
+              giveReward(50); // منح المكافأة
+          }, 2000); 
+      } else {
+          alert("عذراً، الإعلانات غير جاهزة حالياً.");
+      }
+  };
+
+  const showRewardPrompt = () => {
+      const confirmation = confirm("هل تريد زيادة عملاتك؟ شاهد مقطع فيديو قصير واربح 50 عملة مجانية!");
+      if (confirmation) {
+          launchRewardedAd();
+      } else {
+          console.log("اللاعب رفض مشاهدة الإعلان");
       }
   };
 
@@ -220,6 +253,9 @@ const App: React.FC = () => {
                                    <span className="font-mono text-2xl text-yellow-100 font-bold">{user.globalCoins.toLocaleString()}</span>
                                </div>
                            </div>
+                           <button onClick={showRewardPrompt} className="bg-red-700 p-3 rounded-xl hover:bg-red-600 transition-colors" title="شاهد إعلان واربح">
+                               <Youtube size={20} className="text-white"/>
+                           </button>
                            <button onClick={() => setShowExchange(true)} className="bg-slate-700 p-3 rounded-xl hover:bg-slate-600 transition-colors" title="استبدال العملات">
                                <RefreshCw size={20} className="text-emerald-400"/>
                            </button>
