@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, ChatMessage, VoiceEmote } from '../types';
-import { XCircle, Dices, User, ShoppingCart, ChevronsUp, ChevronsDown, Palette, Smile, Volume2, Send, Zap, Heart, Gift, Trophy, AlertCircle } from 'lucide-react';
+import { XCircle, Dices, User, ShoppingCart, ChevronsUp, ChevronsDown, Palette, Smile, Volume2, Send, Zap, Heart, Gift, Trophy, AlertCircle, Clock } from 'lucide-react';
 import { playSound } from '../sounds';
 
 interface LudoGameProps {
@@ -10,7 +10,6 @@ interface LudoGameProps {
     onEndGame: (winner: boolean, coins: number) => void;
 }
 
-// ... (KEEPING EXISTING CONSTANTS FOR DICE_SKINS, BOARD_THEMES, PATHS to save space, assuming they are imported or defined at top)
 const DICE_SKINS = [
     { id: 'standard', name: 'عادي', cost: 0, char: '🎲' },
     { id: 'fire', name: 'ناري', cost: 200, char: '🔥' },
@@ -67,6 +66,7 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
     // --- Game State ---
     const [matchCoins, setMatchCoins] = useState(1000); 
     const [diceValue, setDiceValue] = useState(1);
+    const [botDiceValue, setBotDiceValue] = useState(1); // Separate dice for bot
     const [rolling, setRolling] = useState(false);
     const [turn, setTurn] = useState<'red'|'yellow'>('red');
     const [pieces, setPieces] = useState<Piece[]>([
@@ -79,6 +79,7 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
     const [message, setMessage] = useState('ابدأ اللعب');
     const [hasAutoPlay, setHasAutoPlay] = useState(false);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(30);
 
     // --- Shop & Customization State ---
     const [activeDiceSkin, setActiveDiceSkin] = useState(DICE_SKINS[0]);
@@ -103,6 +104,23 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
         return () => { gameActiveRef.current = false; };
     }, []);
 
+    // Timer
+    useEffect(() => {
+        let interval: ReturnType<typeof setInterval>;
+        if (!showTrophy && !showExitConfirm) {
+            interval = setInterval(() => {
+                setTimeLeft(prev => {
+                    if (prev <= 0) {
+                        switchTurn(); // Auto switch
+                        return 30;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [turn, showTrophy, showExitConfirm]);
+
     // Bot Turn Logic & AutoPlay
     useEffect(() => {
         if (!gameActiveRef.current) return;
@@ -124,20 +142,12 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
     const rollDice = (isCheat: boolean = false) => {
         if (rolling) return;
         
-        // Validation: Only roll if it's your turn OR you are the bot
+        // Validation
         const isMyTurn = turn === 'red';
         const isBotTurn = turn === 'yellow';
         
-        if (isBotTurn && !isBot) {
-            // Online logic placeholder
-        } else if (isBotTurn && isBot) {
-            // Allowed via Effect
-        } else if (isMyTurn) {
-            // Allowed
-        } else {
-            return;
-        }
-
+        if (isBotTurn && !isBot) return; // Online wait
+        if (isMyTurn && !isAutoPlaying && !isCheat && isBotTurn) return; // Basic validation
         if (isMyTurn && diceCheat !== 'none') {
              if (matchCoins < 200) {
                  alert('ليس لديك عملات كافية للغش!');
@@ -153,7 +163,9 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
         
         let i = 0;
         const interval = setInterval(() => {
-            setDiceValue(Math.floor(Math.random() * 6) + 1);
+            const val = Math.floor(Math.random() * 6) + 1;
+            if (turn === 'red') setDiceValue(val);
+            else setBotDiceValue(val);
             i++;
             if (i > 8) {
                 clearInterval(interval);
@@ -163,9 +175,11 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                     if (diceCheat === 'high') finalVal = 4 + Math.floor(Math.random() * 3); 
                     if (diceCheat === 'low') finalVal = 1 + Math.floor(Math.random() * 3); 
                     setDiceCheat('none'); 
+                    setDiceValue(finalVal);
+                } else {
+                    setBotDiceValue(finalVal);
                 }
 
-                setDiceValue(finalVal);
                 setRolling(false);
                 checkPossibleMoves(finalVal);
             }
@@ -197,9 +211,10 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
 
     const handlePieceClick = (piece: Piece) => {
         if (!waitingForMove || piece.color !== turn) return;
-        if (isAutoPlaying && turn === 'red') return; // Disable manual click if autoplay
-        if (!canMove(piece, diceValue)) return;
-        movePiece(piece, diceValue);
+        const currentDice = turn === 'red' ? diceValue : botDiceValue;
+        if (isAutoPlaying && turn === 'red') return; 
+        if (!canMove(piece, currentDice)) return;
+        movePiece(piece, currentDice);
     };
 
     const movePiece = (piece: Piece, steps: number) => {
@@ -259,15 +274,17 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
         setTurn(prev => prev === 'red' ? 'yellow' : 'red');
         setRolling(false);
         setWaitingForMove(false);
-        setDiceValue(1);
+        setTimeLeft(30);
+        // setDiceValue(1); // Don't reset visual immediately
         setMessage(turn === 'red' ? `دورك` : `دور ${opponentName}`);
     };
 
     const botMakeMove = (color: 'red' | 'yellow') => {
-        const validPieces = pieces.filter(p => p.color === color && canMove(p, diceValue));
+        const currentDice = color === 'red' ? diceValue : botDiceValue;
+        const validPieces = pieces.filter(p => p.color === color && canMove(p, currentDice));
         if (validPieces.length > 0) {
             const pick = validPieces[Math.floor(Math.random() * validPieces.length)];
-            movePiece(pick, diceValue);
+            movePiece(pick, currentDice);
         } else {
             switchTurn();
         }
@@ -365,14 +382,18 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                      </div>
                  </div>
 
+                 {/* Bot Dice Display (Top) */}
+                 <div className="absolute top-14 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                     <div className={`w-14 h-14 bg-yellow-200 rounded-xl flex items-center justify-center font-bold text-black border-2 border-yellow-500 shadow-lg text-3xl ${turn === 'yellow' ? 'ring-2 ring-yellow-400' : 'opacity-60 scale-90'}`}>
+                        {turn === 'yellow' && rolling ? '...' : botDiceValue}
+                     </div>
+                 </div>
+
                  {/* Opponent Info (Top Right) */}
                  <div className="flex items-center gap-2 relative">
                      <div className="flex flex-col items-end">
                          <span className="text-xs text-slate-300">{opponentName}</span>
-                         {/* Opponent Dice */}
-                         <div className={`w-8 h-8 bg-yellow-200 rounded flex items-center justify-center font-bold text-black border border-yellow-500 ${turn === 'yellow' ? 'animate-bounce' : 'opacity-50'}`}>
-                            {turn === 'yellow' && rolling ? '...' : (turn === 'yellow' ? diceValue : '')}
-                         </div>
+                         <div className="text-xs text-slate-500">Bot</div>
                      </div>
                      <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center font-bold">{opponentName.charAt(0)}</div>
                      {/* Gift Overlay for Opponent */}
@@ -454,7 +475,8 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                 })}
                 {/* Pieces */}
                 {pieces.map(p => {
-                    const canClick = turn === p.color && waitingForMove && canMove(p, diceValue) && (!isBot || turn === 'red');
+                    const currentDice = turn === 'red' ? diceValue : botDiceValue;
+                    const canClick = turn === p.color && waitingForMove && canMove(p, currentDice) && (!isBot || turn === 'red');
                     return (
                         <div key={p.id} onClick={() => handlePieceClick(p)} style={getPieceStyle(p)} 
                              className={`absolute w-[5%] h-[5%] rounded-full border-2 border-white shadow-md transition-all duration-300 z-10 flex items-center justify-center ${p.color === 'red' ? 'bg-red-600' : 'bg-yellow-500'} ${canClick ? 'animate-bounce ring-2 ring-white cursor-pointer' : ''}`}>
@@ -466,17 +488,26 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
 
             {/* Controls & Cheats */}
             <div className="w-full flex justify-between items-end px-4 gap-4 relative">
-                {/* Cheat Buttons */}
-                <div className="flex flex-col gap-2">
-                    <button onClick={() => setDiceCheat('high')} disabled={turn !== 'red' || rolling} className="p-2 rounded-lg bg-green-900/50 border border-green-500 text-xs text-green-300">
-                        <ChevronsUp size={16} className="mx-auto mb-1"/><span className="text-[9px]">200 🪙</span>
-                    </button>
-                    <button onClick={() => setDiceCheat('low')} disabled={turn !== 'red' || rolling} className="p-2 rounded-lg bg-red-900/50 border border-red-500 text-xs text-red-300">
-                        <ChevronsDown size={16} className="mx-auto mb-1"/><span className="text-[9px]">200 🪙</span>
-                    </button>
+                
+                {/* Chat Display (Bottom Left) */}
+                <div className="absolute bottom-4 left-4 z-40 flex flex-col items-start gap-2">
+                    {/* Last message bubble */}
+                    {chatMessages.length > 0 && (
+                        <div className="bg-slate-800/90 text-white p-2 rounded-xl rounded-bl-none text-xs max-w-[150px] animate-in fade-in slide-in-from-bottom-5">
+                            <span className="font-bold text-yellow-400 block">{chatMessages[chatMessages.length-1].sender}:</span>
+                            {chatMessages[chatMessages.length-1].emoji || chatMessages[chatMessages.length-1].text}
+                        </div>
+                    )}
+                    
+                    <div className="flex items-center gap-2">
+                        <div className="bg-slate-800 px-3 py-1 rounded-full text-yellow-400 font-mono flex items-center gap-1 border border-white/10">
+                            <Clock size={12}/> {timeLeft}
+                        </div>
+                        <button onClick={() => setShowEmotes(!showEmotes)} className="p-3 bg-slate-700 rounded-full text-yellow-400 shadow-lg border border-white/10"><Smile/></button>
+                    </div>
                 </div>
 
-                {/* Player Dice (Bottom Left/Center) - Manual Control */}
+                {/* Player Dice (Bottom Center) */}
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
                     <div className="text-white text-sm mb-2 font-bold">{turn === 'red' ? 'دورك' : ''}</div>
                     <button 
@@ -484,19 +515,24 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                         disabled={rolling || (turn !== 'red' && isBot) || waitingForMove}
                         className={`w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center text-5xl shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-transform active:scale-95 ${rolling ? 'animate-spin' : ''} ${turn === 'red' ? 'ring-4 ring-emerald-500' : 'opacity-50'}`}
                     >
-                        {turn === 'red' && rolling ? activeDiceSkin.char : (turn === 'red' && diceValue > 0 ? <span className="text-black">{diceValue}</span> : activeDiceSkin.char)}
+                        {turn === 'red' && rolling ? activeDiceSkin.char : (turn === 'red' ? <span className="text-black">{diceValue}</span> : activeDiceSkin.char)}
                     </button>
                 </div>
 
-                {/* Chat Toggle */}
-                <div className="flex flex-col justify-end h-full ml-auto">
-                    <button onClick={() => setShowEmotes(!showEmotes)} className="p-3 bg-slate-700 rounded-full text-yellow-400"><Smile/></button>
+                {/* Cheat Buttons (Right) */}
+                <div className="flex flex-col gap-2 ml-auto">
+                    <button onClick={() => setDiceCheat('high')} disabled={turn !== 'red' || rolling} className="p-2 rounded-lg bg-green-900/50 border border-green-500 text-xs text-green-300">
+                        <ChevronsUp size={16} className="mx-auto mb-1"/><span className="text-[9px]">200 🪙</span>
+                    </button>
+                    <button onClick={() => setDiceCheat('low')} disabled={turn !== 'red' || rolling} className="p-2 rounded-lg bg-red-900/50 border border-red-500 text-xs text-red-300">
+                        <ChevronsDown size={16} className="mx-auto mb-1"/><span className="text-[9px]">200 🪙</span>
+                    </button>
                 </div>
             </div>
 
-            {/* Chat UI Overlay */}
+            {/* Chat UI Overlay (Slides up when clicked) */}
             {showEmotes && (
-                <div className="absolute bottom-0 left-0 right-0 bg-slate-800 rounded-t-2xl p-4 z-40 border-t border-white/20 animate-in slide-in-from-bottom">
+                <div className="absolute bottom-0 left-0 right-0 bg-slate-800 rounded-t-2xl p-4 z-50 border-t border-white/20 animate-in slide-in-from-bottom">
                     <div className="flex justify-between items-center mb-2">
                         <span className="text-white font-bold">دردشة</span>
                         <button onClick={() => setShowEmotes(false)}><XCircle size={16} className="text-slate-400"/></button>

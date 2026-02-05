@@ -4,7 +4,8 @@ import { DominoGame } from './games/DominoGame';
 import { CardGame } from './games/CardGame';
 import { LudoGame } from './games/LudoGame';
 import { BankGame } from './games/BankGame';
-import { User, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, RefreshCw, Settings, Volume2, Smartphone, Trash2, Save, Heart, X, Youtube, LogOut, CheckCircle, Edit2 } from 'lucide-react';
+import { ChessGame } from './games/ChessGame';
+import { User, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, RefreshCw, Settings, Volume2, Smartphone, Trash2, Save, Heart, X, Youtube, LogOut, CheckCircle, Edit2, Castle } from 'lucide-react';
 import { playSound } from './sounds';
 
 const AVATARS = Array.from({ length: 20 }, (_, i) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${i * 1234}&backgroundColor=b6e3f4`);
@@ -161,15 +162,16 @@ const App: React.FC = () => {
       if (v.includes('card')) return 'الشايب';
       if (v.includes('ludo')) return 'ليدو';
       if (v.includes('bank')) return 'بنك الحظ';
+      if (v.includes('chess')) return 'شطرنج';
       return 'لعبة';
   };
 
-  const setupGame = (type: 'domino' | 'card' | 'ludo' | 'bank', isOnline: boolean) => {
+  const setupGame = (type: 'domino' | 'card' | 'ludo' | 'bank' | 'chess', isOnline: boolean) => {
       setIsBotGame(!isOnline);
       setOpponentName(isOnline ? 'المنشئ' : 'الكمبيوتر');
       setLobbyCode(isOnline ? '' : ''); 
       const map: Record<string, AppView> = {
-          domino: 'game_domino', card: 'game_card', ludo: 'game_ludo', bank: 'game_bank'
+          domino: 'game_domino', card: 'game_card', ludo: 'game_ludo', bank: 'game_bank', chess: 'game_chess'
       };
       setView(map[type]);
   };
@@ -305,13 +307,13 @@ const App: React.FC = () => {
               {/* Dashboard */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                   <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {['domino', 'card', 'ludo', 'bank'].map(g => (
-                          <div key={g} onClick={() => setView(`lobby_${g}` as AppView)} className={`bg-gradient-to-br ${g==='domino'?'from-indigo-900':g==='card'?'from-red-900':g==='ludo'?'from-yellow-900':'from-emerald-900'} to-slate-900 p-6 rounded-2xl border border-white/10 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group`}>
+                      {['domino', 'card', 'ludo', 'bank', 'chess'].map(g => (
+                          <div key={g} onClick={() => setView(`lobby_${g}` as AppView)} className={`bg-gradient-to-br ${g==='domino'?'from-indigo-900':g==='card'?'from-red-900':g==='ludo'?'from-yellow-900':g==='bank'?'from-emerald-900':'from-slate-700'} to-slate-900 p-6 rounded-2xl border border-white/10 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group`}>
                               <div className="absolute right-0 bottom-0 opacity-10 group-hover:scale-110 transition-transform">
-                                  {g==='domino'?<Gamepad2 size={100}/>:g==='card'?<User size={100}/>:g==='ludo'?<Grid3X3 size={100}/>:<Building2 size={100}/>}
+                                  {g==='domino'?<Gamepad2 size={100}/>:g==='card'?<User size={100}/>:g==='ludo'?<Grid3X3 size={100}/>:g==='bank'?<Building2 size={100}/>:<Castle size={100}/>}
                               </div>
-                              <h2 className="text-2xl font-bold mb-1">{g==='domino'?'دومينو':g==='card'?'الشايب':g==='ludo'?'ليدو':'بنك الحظ'}</h2>
-                              <p className="text-slate-300 text-sm">لعب سريع</p>
+                              <h2 className="text-2xl font-bold mb-1">{g==='domino'?'دومينو':g==='card'?'الشايب':g==='ludo'?'ليدو':g==='bank'?'بنك الحظ':'الشطرنج'}</h2>
+                              <p className="text-slate-300 text-sm">{g==='chess' ? 'استراتيجي' : 'لعب سريع'}</p>
                           </div>
                       ))}
                   </div>
@@ -409,12 +411,12 @@ const App: React.FC = () => {
   }
 
   // Lobby Helper
-  const renderLobby = (gameType: 'domino' | 'card' | 'ludo' | 'bank') => (
+  const renderLobby = (gameType: 'domino' | 'card' | 'ludo' | 'bank' | 'chess') => (
       <div className="min-h-screen flex items-center justify-center p-4">
           <div className="bg-slate-800/90 p-8 rounded-2xl border border-white/10 max-w-md w-full relative">
               <button onClick={() => setView('menu')} className="absolute top-4 left-4 text-slate-400 hover:text-white">رجوع</button>
               <h2 className="text-2xl font-bold text-center mb-8">
-                {gameType === 'domino' ? 'لوبي الدومينو' : gameType === 'card' ? 'لوبي الكوتشينة' : gameType === 'ludo' ? 'لوبي ليدو' : 'لوبي بنك الحظ'}
+                {gameType === 'domino' ? 'لوبي الدومينو' : gameType === 'card' ? 'لوبي الكوتشينة' : gameType === 'ludo' ? 'لوبي ليدو' : gameType === 'bank' ? 'لوبي بنك الحظ' : 'لوبي الشطرنج'}
               </h2>
               
               {!lobbyCode ? (
@@ -449,6 +451,7 @@ const App: React.FC = () => {
   if (view === 'game_card') return <CardGame user={user} onEndGame={handleGameEnd} />;
   if (view === 'game_ludo') return <LudoGame user={user} isBot={isBotGame} opponentName={opponentName} onEndGame={handleGameEnd} />;
   if (view === 'game_bank') return <BankGame user={user} isBot={isBotGame} opponentName={opponentName} onEndGame={handleGameEnd} />;
+  if (view === 'game_chess') return <ChessGame user={user} isBot={isBotGame} opponentName={opponentName} onEndGame={handleGameEnd} />;
 
   return <div>Loading...</div>;
 };

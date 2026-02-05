@@ -102,8 +102,8 @@ export type VoiceEmote = 'laugh' | 'angry' | 'kiss';
 
 // --- App Navigation ---
 export type AppView = 'splash' | 'menu' | 
-                      'lobby_domino' | 'lobby_card' | 'lobby_ludo' | 'lobby_bank' |
-                      'game_domino' | 'game_card' | 'game_ludo' | 'game_bank';
+                      'lobby_domino' | 'lobby_card' | 'lobby_ludo' | 'lobby_bank' | 'lobby_chess' |
+                      'game_domino' | 'game_card' | 'game_ludo' | 'game_bank' | 'game_chess';
 
 export interface UserSettings {
     musicEnabled: boolean;
