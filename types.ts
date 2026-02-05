@@ -1,3 +1,4 @@
+
 export type TileValue = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 // --- Domino Types ---
@@ -111,6 +112,7 @@ export interface UserSettings {
 
 export interface UserProfile {
   name: string;
+  avatar: string; // Added avatar field
   globalCoins: number; 
   level: number;
   xp: number;

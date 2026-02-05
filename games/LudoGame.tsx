@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, ChatMessage, VoiceEmote } from '../types';
-import { XCircle, Dices, User, ShoppingCart, ChevronsUp, ChevronsDown, Palette, Smile, Volume2, Send, Zap, Heart, Gift } from 'lucide-react';
+import { XCircle, Dices, User, ShoppingCart, ChevronsUp, ChevronsDown, Palette, Smile, Volume2, Send, Zap, Heart, Gift, Trophy, AlertCircle } from 'lucide-react';
 import { playSound } from '../sounds';
 
 interface LudoGameProps {
@@ -10,7 +10,7 @@ interface LudoGameProps {
     onEndGame: (winner: boolean, coins: number) => void;
 }
 
-// --- Data ---
+// ... (KEEPING EXISTING CONSTANTS FOR DICE_SKINS, BOARD_THEMES, PATHS to save space, assuming they are imported or defined at top)
 const DICE_SKINS = [
     { id: 'standard', name: 'عادي', cost: 0, char: '🎲' },
     { id: 'fire', name: 'ناري', cost: 200, char: '🔥' },
@@ -25,7 +25,6 @@ const BOARD_THEMES = [
     { id: 'stone', name: 'حجري', cost: 200, bg: 'bg-stone-300', border: 'border-stone-600' },
 ];
 
-// Simplified path coords
 const RED_PATH_COORDS = [
   {r:6, c:1}, {r:6, c:2}, {r:6, c:3}, {r:6, c:4}, {r:6, c:5},
   {r:5, c:6}, {r:4, c:6}, {r:3, c:6}, {r:2, c:6}, {r:1, c:6}, {r:0, c:6},
@@ -92,6 +91,10 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
     const [chatInput, setChatInput] = useState('');
     const [showEmotes, setShowEmotes] = useState(false);
     const [floatingEmote, setFloatingEmote] = useState<{char: string, type: string, target?: string} | null>(null);
+    
+    // UI
+    const [showExitConfirm, setShowExitConfirm] = useState(false);
+    const [showTrophy, setShowTrophy] = useState<'gold' | 'silver' | null>(null);
 
     const gameActiveRef = useRef(true);
 
@@ -237,7 +240,7 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
             // Win Check
             const myFinished = nextPieces.filter(p => p.color === piece.color && p.position === 99).length;
             if (myFinished === 4) {
-                onEndGame(piece.color === 'red', piece.color === 'red' ? 2000 : 0);
+                finishGame(piece.color === 'red');
                 return nextPieces;
             }
 
@@ -263,8 +266,6 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
     const botMakeMove = (color: 'red' | 'yellow') => {
         const validPieces = pieces.filter(p => p.color === color && canMove(p, diceValue));
         if (validPieces.length > 0) {
-            // Heuristic: 1. Capture, 2. Escape Home (-1), 3. Random
-            // Simplified to random for now
             const pick = validPieces[Math.floor(Math.random() * validPieces.length)];
             movePiece(pick, diceValue);
         } else {
@@ -272,7 +273,6 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
         }
     };
 
-    // --- Shop Logic ---
     const buyItem = (cost: number, callback: () => void) => {
         if (matchCoins >= cost) {
             setMatchCoins(prev => prev - cost);
@@ -282,6 +282,26 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
             setShowShop(false);
         } else {
             alert('لا يوجد عملات كافية!');
+        }
+    };
+
+    const finishGame = (win: boolean) => {
+        playSound(win ? 'win' : 'lose');
+        setShowTrophy(win ? 'gold' : 'silver');
+    };
+
+    const closeTrophy = () => {
+        onEndGame(showTrophy === 'gold', showTrophy === 'gold' ? 2000 : 0);
+    };
+
+    const toggleAutoPlay = () => {
+        if (!hasAutoPlay) {
+            buyItem(500, () => {
+                setHasAutoPlay(true);
+                setIsAutoPlaying(true);
+            });
+        } else {
+            setIsAutoPlaying(!isAutoPlaying);
         }
     };
 
@@ -297,7 +317,7 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
         if (isVoice) playSound(soundType || 'laugh');
         
         if (isGift) {
-            setFloatingEmote({ char: emote, type: 'gift', target: 'opponent' }); // Send to opponent
+            setFloatingEmote({ char: emote, type: 'gift', target: 'opponent' }); 
         } else {
             setFloatingEmote({ char: emote, type: soundType || 'emoji' });
         }
@@ -334,7 +354,7 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
              {/* Header with Shop & Coins */}
              <div className="w-full flex justify-between items-center bg-slate-800 p-2 rounded-xl mb-2 z-20">
                  <div className="flex items-center gap-2 relative">
-                     <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-bold">{user.name.charAt(0)}</div>
+                     <img src={user.avatar} className="w-8 h-8 rounded-full border border-white"/>
                      {/* Gift Overlay for User */}
                      {floatingEmote?.type === 'gift' && floatingEmote.target === 'self' && (
                          <div className="absolute -top-10 left-0 text-4xl animate-bounce z-50">{floatingEmote.char}</div>
@@ -366,14 +386,14 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                          <ShoppingCart size={18}/>
                      </button>
                      <button 
-                        onClick={() => hasAutoPlay ? setIsAutoPlaying(!isAutoPlaying) : buyItem(500, () => setHasAutoPlay(true))}
-                        className={`p-2 rounded-full shadow-lg ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse' : 'bg-slate-600') : 'bg-orange-500'}`}
+                        onClick={toggleAutoPlay}
+                        className={`p-2 rounded-full shadow-lg ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse ring-2 ring-green-300' : 'bg-slate-600') : 'bg-orange-500'}`}
                      >
                         <Zap size={18} className="text-white"/>
                      </button>
                  </div>
                  
-                 <button onClick={() => onEndGame(false, 0)} className="absolute top-2 right-1/2 translate-x-1/2 bg-red-500/20 text-red-200 p-1 rounded-full"><XCircle size={20}/></button>
+                 <button onClick={() => setShowExitConfirm(true)} className="absolute top-2 right-1/2 translate-x-1/2 bg-red-500/20 text-red-200 p-1 rounded-full"><XCircle size={20}/></button>
              </div>
 
              {/* Shop Modal */}
@@ -493,6 +513,48 @@ export const LudoGame: React.FC<LudoGameProps> = ({ user, opponentName, isBot, o
                     <div className="flex bg-slate-900 rounded-full px-3 py-2">
                         <input className="flex-1 bg-transparent text-white text-sm outline-none" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="اكتب..." />
                         <button onClick={() => sendChat(chatInput)} className="text-emerald-400"><Send size={16}/></button>
+                    </div>
+                </div>
+            )}
+
+            {/* Exit Confirmation Modal */}
+            {showExitConfirm && (
+                <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-white/10 max-w-sm w-full text-center">
+                        <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
+                        <h3 className="text-xl font-bold mb-2 text-white">هل أنت متأكد من الخروج؟</h3>
+                        <p className="text-slate-400 mb-6">سيتم اعتبارك خاسراً وستفقد نقاط الجولة.</p>
+                        <div className="flex gap-4">
+                            <button onClick={() => onEndGame(false, 0)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold">تأكيد الخروج</button>
+                            <button onClick={() => setShowExitConfirm(false)} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-3 rounded-xl font-bold">إلغاء</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Trophy Modal */}
+            {showTrophy && (
+                <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 animate-in zoom-in duration-300">
+                    <div className="bg-gradient-to-b from-slate-800 to-slate-900 p-8 rounded-3xl border-4 border-yellow-500/50 text-center max-w-sm w-full relative overflow-hidden">
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+                        
+                        {showTrophy === 'gold' ? (
+                            <>
+                                <Trophy size={100} className="mx-auto text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce mb-4" />
+                                <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 mb-2">الفائز!</h2>
+                                <p className="text-yellow-100 text-lg mb-6">أداء مذهل يا {user.name}!</p>
+                            </>
+                        ) : (
+                            <>
+                                <Trophy size={100} className="mx-auto text-slate-400 drop-shadow-[0_0_30px_rgba(148,163,184,0.6)] mb-4" />
+                                <h2 className="text-4xl font-black text-slate-300 mb-2">المركز الثاني</h2>
+                                <p className="text-slate-400 text-lg mb-6">حظ أوفر في المرة القادمة!</p>
+                            </>
+                        )}
+                        
+                        <button onClick={closeTrophy} className="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-xl shadow-lg relative z-10">
+                            استمرار
+                        </button>
                     </div>
                 </div>
             )}

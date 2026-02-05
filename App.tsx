@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, AppView, LeaderboardUser } from './types';
+import { UserProfile, AppView } from './types';
 import { DominoGame } from './games/DominoGame';
 import { CardGame } from './games/CardGame';
 import { LudoGame } from './games/LudoGame';
 import { BankGame } from './games/BankGame';
-import { User, Play, Users, LogIn, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, TrendingUp, RefreshCw, Settings, Volume2, VolumeX, Smartphone, Trash2, Save, Heart, X, Youtube } from 'lucide-react';
+import { User, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, RefreshCw, Settings, Volume2, Smartphone, Trash2, Save, Heart, X, Youtube, LogOut, CheckCircle, Edit2 } from 'lucide-react';
 import { playSound } from './sounds';
+
+const AVATARS = Array.from({ length: 20 }, (_, i) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${i * 1234}&backgroundColor=b6e3f4`);
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>('splash');
   const [user, setUser] = useState<UserProfile>({ 
       name: '', 
+      avatar: AVATARS[0],
       globalCoins: 10000, 
       level: 1, 
       xp: 0,
@@ -26,13 +29,14 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showExchange, setShowExchange] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState('');
+  const [selectedAvatarIndex, setSelectedAvatarIndex] = useState(0);
 
   // --- Persistence ---
   useEffect(() => {
       const savedData = localStorage.getItem('mir_domino_user');
       if (savedData) {
           const parsed = JSON.parse(savedData);
-          setUser(parsed);
+          setUser({ ...parsed, avatar: parsed.avatar || AVATARS[0] }); // Ensure avatar exists
           setView('menu');
           setWelcomeMessage(`مرحباً بعودتك، ${parsed.name}!`);
           setTimeout(() => setWelcomeMessage(''), 2000);
@@ -51,48 +55,61 @@ const App: React.FC = () => {
       }
   };
 
+  const logout = () => {
+      if(confirm('هل تريد تسجيل الخروج؟')) {
+         setView('splash');
+         setWelcomeMessage('');
+      }
+  }
+
+  // --- Google Login Simulation ---
+  const handleGoogleLogin = () => {
+      // Mocking Firebase Auth flow
+      const mockName = "لاعب جوجل";
+      const mockAvatar = AVATARS[5];
+      alert("جاري الاتصال بحساب Google...");
+      setTimeout(() => {
+          const newUser = { ...user, name: mockName, avatar: mockAvatar, level: 5 }; // Simulated synced level
+          setUser(newUser);
+          localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
+          setView('menu');
+          playSound('win');
+          setWelcomeMessage(`تم تسجيل الدخول: ${mockName}`);
+          setTimeout(() => setWelcomeMessage(''), 2000);
+      }, 1500);
+  };
+
   // --- Reward Ads Logic ---
-  // دالة إضافة العملات
   const giveReward = (amount: number) => {
       const newUser = { ...user, globalCoins: user.globalCoins + amount };
       setUser(newUser);
       localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
-      // alert("مبروك! تمت إضافة " + amount + " عملة لرصيدك. رصيدك الحالي: " + userCoins);
       alert("مبروك! تمت إضافة " + amount + " عملة لرصيدك. رصيدك الحالي: " + newUser.globalCoins);
       playSound('win');
   };
 
-  // دالة تشغيل الإعلان (Rewarded Ad Logic)
   const launchRewardedAd = () => {
-      // هنا نقوم باستدعاء وحدة الإعلان الخاصة بك
-      // ملاحظة: مع AdMob للويب يتم استخدام أداة تهيئة معينة
       if (typeof (window as any).adsbygoogle !== 'undefined') {
           alert("جاري تحميل الإعلان... (سيظهر الإعلان هنا بمجرد قبول حسابك)");
-          
-          // محاكاة انتهاء الإعلان بنجاح
-          // في الواقع، AdMob يرسل تنبيهاً عندما يكمل المستخدم المشاهدة
           setTimeout(() => {
-              giveReward(50); // منح المكافأة
+              giveReward(50);
           }, 2000); 
       } else {
           alert("عذراً، الإعلانات غير جاهزة حالياً.");
       }
   };
 
-  // دالة تظهر الاشعار للاعب
   const showRewardPrompt = () => {
       const confirmation = confirm("هل تريد زيادة عملاتك؟ شاهد مقطع فيديو قصير واربح 50 عملة مجانية!");
       if (confirmation) {
           launchRewardedAd();
-      } else {
-          console.log("اللاعب رفض مشاهدة الإعلان");
       }
   };
 
   // --- Navigation Handlers ---
   const enterGame = (name: string) => {
       if(!name.trim()) return;
-      const newUser = { ...user, name };
+      const newUser = { ...user, name, avatar: AVATARS[selectedAvatarIndex] };
       setUser(newUser);
       localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
       setView('menu');
@@ -102,7 +119,6 @@ const App: React.FC = () => {
   };
 
   const handleGameEnd = (winnerIsHuman: boolean, coinReward: number) => {
-      // XP Calculation: Win = 100 XP, Loss = 20 XP
       const xpGain = winnerIsHuman ? 100 : 20;
       const newXp = user.xp + xpGain;
       const newLevel = Math.floor(newXp / 1000) + 1; 
@@ -115,7 +131,7 @@ const App: React.FC = () => {
       };
 
       setUser(updatedUser);
-      localStorage.setItem('mir_domino_user', JSON.stringify(updatedUser)); // Auto Save
+      localStorage.setItem('mir_domino_user', JSON.stringify(updatedUser)); 
 
       if (newLevel > user.level) {
           playSound('win');
@@ -131,16 +147,8 @@ const App: React.FC = () => {
       setView('menu');
   };
 
-  // Currency Exchange: Global -> Game (Simulated by deducting global)
-  // In this architecture, games manage their own "Session Currency" (Match Coins) or use Global directly.
-  // We will simulate buying "Match Coins" or simply adding to Global for demo purposes.
-  // The request says "Convert Global to Any Game". Let's assume games use Global, so "Exchange" is actually "Buy Global" or similar?
-  // Or "Buy Game Specific". Let's simply implement a "Refill" mechanic.
   const handleExchange = (amount: number) => {
       if (user.globalCoins >= amount) {
-          // In a real app, this would add to a specific game wallet.
-          // Here we just re-add it to global to simulate the transaction for UI
-          // setUser(prev => ({ ...prev, globalCoins: prev.globalCoins - amount }));
           alert('تم تحويل العملات بنجاح إلى رصيد اللعبة! (محاكاة)');
           setShowExchange(false);
       } else {
@@ -156,11 +164,10 @@ const App: React.FC = () => {
       return 'لعبة';
   };
 
-  // --- Game Setup ---
   const setupGame = (type: 'domino' | 'card' | 'ludo' | 'bank', isOnline: boolean) => {
       setIsBotGame(!isOnline);
       setOpponentName(isOnline ? 'المنشئ' : 'الكمبيوتر');
-      setLobbyCode(isOnline ? '' : ''); // Reset
+      setLobbyCode(isOnline ? '' : ''); 
       const map: Record<string, AppView> = {
           domino: 'game_domino', card: 'game_card', ludo: 'game_ludo', bank: 'game_bank'
       };
@@ -191,22 +198,52 @@ const App: React.FC = () => {
   if (view === 'splash') {
       return (
           <div className="min-h-screen flex items-center justify-center p-4">
-              <div className="bg-slate-800/80 backdrop-blur-md p-8 rounded-2xl border border-white/10 shadow-2xl max-w-md w-full text-center">
-                  <div className="w-24 h-24 bg-emerald-500 rounded-full mx-auto flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.5)] animate-bounce">
-                      <Gamepad2 size={48} className="text-white"/>
+              <div className="bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl max-w-md w-full text-center overflow-y-auto max-h-[90vh]">
+                  <div className="w-20 h-20 bg-emerald-500 rounded-full mx-auto flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(16,185,129,0.5)] animate-bounce">
+                      <Gamepad2 size={40} className="text-white"/>
                   </div>
-                  <h1 className="text-4xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-500">دومينو ميرو</h1>
+                  <h1 className="text-3xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-500">دومينو ميرو</h1>
                   
+                  {/* Avatar Selection */}
+                  <div className="mb-4 text-left">
+                      <label className="text-sm text-slate-400 mb-2 block">اختر شكلك:</label>
+                      <div className="grid grid-cols-5 gap-2 bg-slate-900/50 p-2 rounded-lg h-32 overflow-y-auto custom-scroll">
+                          {AVATARS.map((avi, idx) => (
+                              <img 
+                                key={idx} 
+                                src={avi} 
+                                className={`w-10 h-10 rounded-full cursor-pointer transition-all ${selectedAvatarIndex === idx ? 'ring-2 ring-emerald-500 scale-110 bg-white' : 'opacity-50 hover:opacity-100'}`}
+                                onClick={() => setSelectedAvatarIndex(idx)}
+                              />
+                          ))}
+                      </div>
+                  </div>
+
                   <input 
                     className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-center text-lg mb-4 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                     placeholder="ادخل اسمك"
+                    value={user.name}
                     onChange={(e) => setUser(prev => ({...prev, name: e.target.value}))}
                   />
+                  
                   <button 
                     onClick={() => enterGame(user.name)}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-3 rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95"
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-3 rounded-xl shadow-lg mb-4"
                   >
                     دخول اللعبة
+                  </button>
+
+                  <div className="relative mb-4">
+                      <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-600"></div></div>
+                      <div className="relative flex justify-center text-sm"><span className="px-2 bg-slate-800 text-slate-400">أو</span></div>
+                  </div>
+
+                  <button 
+                    onClick={handleGoogleLogin}
+                    className="w-full bg-white text-slate-900 font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 hover:bg-gray-100"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.35 0 9.25-3.67 9.25-9.09c0-1.15-.15-1.81-.15-1.81Z"/></svg>
+                    تسجيل الدخول بجوجل
                   </button>
               </div>
           </div>
@@ -218,7 +255,6 @@ const App: React.FC = () => {
           <div className="min-h-screen flex flex-col p-4 pt-10 overflow-y-auto relative pb-16">
               <Ticker />
               
-              {/* Welcome Toast */}
               {welcomeMessage && (
                   <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-8 py-4 rounded-2xl border border-emerald-500 z-[60] animate-bounce text-xl font-bold backdrop-blur">
                       {welcomeMessage}
@@ -229,12 +265,10 @@ const App: React.FC = () => {
               <div className="bg-slate-800/80 backdrop-blur p-4 rounded-2xl border border-white/10 mb-6 shadow-xl relative overflow-hidden">
                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                       {/* Profile / Level - Clickable for Settings */}
+                       {/* Profile */}
                        <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setShowSettings(true)}>
                            <div className="relative">
-                               <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center font-bold text-2xl border-2 border-white/20 shadow-lg">
-                                   {user.name.charAt(0)}
-                               </div>
+                               <img src={user.avatar} className="w-16 h-16 rounded-full bg-white border-2 border-white/20 shadow-lg"/>
                                <div className="absolute -bottom-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full border border-white">
                                    LVL {user.level}
                                </div>
@@ -268,33 +302,20 @@ const App: React.FC = () => {
                    </div>
               </div>
 
-              {/* Dashboard / Leaderboard */}
+              {/* Dashboard */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                  {/* Games */}
                   <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div onClick={() => setView('lobby_domino')} className="bg-gradient-to-br from-indigo-900 to-slate-900 p-6 rounded-2xl border border-indigo-500/30 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group">
-                          <div className="absolute right-0 bottom-0 opacity-10 group-hover:scale-110 transition-transform"><Gamepad2 size={100} /></div>
-                          <h2 className="text-2xl font-bold mb-1">دومينو</h2>
-                          <p className="text-indigo-300 text-sm">كلاسيك</p>
-                      </div>
-                      <div onClick={() => setView('lobby_card')} className="bg-gradient-to-br from-red-900 to-slate-900 p-6 rounded-2xl border border-red-500/30 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group">
-                          <div className="absolute right-0 bottom-0 opacity-10 group-hover:scale-110 transition-transform"><Users size={100} /></div>
-                          <h2 className="text-2xl font-bold mb-1">الشايب</h2>
-                          <p className="text-red-300 text-sm">أوراق</p>
-                      </div>
-                      <div onClick={() => setView('lobby_ludo')} className="bg-gradient-to-br from-yellow-900 to-slate-900 p-6 rounded-2xl border border-yellow-500/30 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group">
-                          <div className="absolute right-0 bottom-0 opacity-10 group-hover:scale-110 transition-transform"><Grid3X3 size={100} /></div>
-                          <h2 className="text-2xl font-bold mb-1">ليدو</h2>
-                          <p className="text-yellow-300 text-sm">نرد</p>
-                      </div>
-                      <div onClick={() => setView('lobby_bank')} className="bg-gradient-to-br from-emerald-900 to-slate-900 p-6 rounded-2xl border border-emerald-500/30 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group">
-                          <div className="absolute right-0 bottom-0 opacity-10 group-hover:scale-110 transition-transform"><Building2 size={100} /></div>
-                          <h2 className="text-2xl font-bold mb-1">بنك الحظ</h2>
-                          <p className="text-emerald-300 text-sm">تجارية</p>
-                      </div>
+                      {['domino', 'card', 'ludo', 'bank'].map(g => (
+                          <div key={g} onClick={() => setView(`lobby_${g}` as AppView)} className={`bg-gradient-to-br ${g==='domino'?'from-indigo-900':g==='card'?'from-red-900':g==='ludo'?'from-yellow-900':'from-emerald-900'} to-slate-900 p-6 rounded-2xl border border-white/10 cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group`}>
+                              <div className="absolute right-0 bottom-0 opacity-10 group-hover:scale-110 transition-transform">
+                                  {g==='domino'?<Gamepad2 size={100}/>:g==='card'?<User size={100}/>:g==='ludo'?<Grid3X3 size={100}/>:<Building2 size={100}/>}
+                              </div>
+                              <h2 className="text-2xl font-bold mb-1">{g==='domino'?'دومينو':g==='card'?'الشايب':g==='ludo'?'ليدو':'بنك الحظ'}</h2>
+                              <p className="text-slate-300 text-sm">لعب سريع</p>
+                          </div>
+                      ))}
                   </div>
 
-                  {/* Leaderboard - Only You */}
                   <div className="bg-slate-800/50 rounded-2xl border border-white/5 p-4 flex flex-col">
                       <div className="flex items-center gap-2 mb-4 text-yellow-400 font-bold text-lg">
                           <Trophy /> اللاعبين النشطين
@@ -315,19 +336,30 @@ const App: React.FC = () => {
                   </div>
               </div>
 
-              {/* Footer */}
-              <div className="mt-auto text-center text-slate-500 text-sm pb-4">
-                  <p>مع تحيات المطور <span className="text-emerald-400 font-bold">Amir Lamay</span> ❤️</p>
-              </div>
-
               {/* Settings Modal */}
               {showSettings && (
                   <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
-                      <div className="bg-slate-800 p-6 rounded-2xl border border-white/10 w-full max-w-sm relative">
+                      <div className="bg-slate-800 p-6 rounded-2xl border border-white/10 w-full max-w-sm relative max-h-[90vh] overflow-y-auto">
                           <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X/></button>
-                          <h2 className="text-2xl font-bold mb-6 text-center">الإعدادات</h2>
+                          <h2 className="text-2xl font-bold mb-4 text-center">الإعدادات</h2>
                           
                           <div className="space-y-4">
+                              {/* Edit Profile */}
+                              <div className="bg-slate-700/50 p-3 rounded-xl">
+                                  <label className="text-xs text-slate-400">تغيير الاسم</label>
+                                  <div className="flex gap-2 mt-1">
+                                      <input className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 text-white" value={user.name} onChange={e => setUser(p => ({...p, name: e.target.value}))}/>
+                                      <Edit2 size={20} className="text-slate-400"/>
+                                  </div>
+                                  
+                                  <label className="text-xs text-slate-400 mt-2 block">تغيير الصورة</label>
+                                  <div className="grid grid-cols-5 gap-2 mt-1 bg-slate-900 p-2 rounded h-24 overflow-y-auto custom-scroll">
+                                      {AVATARS.map((avi, idx) => (
+                                          <img key={idx} src={avi} onClick={() => setUser(p => ({...p, avatar: avi}))} className={`w-8 h-8 rounded-full cursor-pointer ${user.avatar === avi ? 'ring-2 ring-emerald-500 bg-white' : 'opacity-50'}`}/>
+                                      ))}
+                                  </div>
+                              </div>
+
                               <div className="flex justify-between items-center bg-slate-700/50 p-3 rounded-xl">
                                   <span className="flex items-center gap-2"><Volume2 size={20}/> الموسيقى</span>
                                   <button onClick={() => setUser(p => ({...p, settings: {...p.settings, musicEnabled: !p.settings.musicEnabled}}))} className={`w-12 h-6 rounded-full relative transition-colors ${user.settings.musicEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}>
@@ -343,16 +375,16 @@ const App: React.FC = () => {
                               </div>
 
                               <button onClick={saveData} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2">
-                                  <Save size={20}/> حفظ البيانات
+                                  <Save size={20}/> حفظ التغييرات
+                              </button>
+                              
+                              <button onClick={logout} className="w-full bg-slate-600 hover:bg-slate-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+                                  <LogOut size={20}/> تسجيل الخروج
                               </button>
 
                               <button onClick={deleteAccount} className="w-full bg-red-900/50 hover:bg-red-900/80 text-red-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 border border-red-500/30">
                                   <Trash2 size={20}/> حذف الحساب
                               </button>
-
-                              <a href="https://ipn.eg/S/ahlyamiir/instapay/3vvs0B" target="_blank" rel="noopener noreferrer" className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-white mt-4">
-                                  <Heart size={20} className="fill-white"/> ادعم المطور
-                              </a>
                           </div>
                       </div>
                   </div>
@@ -363,12 +395,10 @@ const App: React.FC = () => {
                   <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
                       <div className="bg-slate-800 p-6 rounded-2xl border border-white/10 w-full max-w-sm text-center">
                           <h2 className="text-xl font-bold mb-4">تحويل العملات</h2>
-                          <p className="text-slate-400 text-sm mb-6">تحويل العملة العالمية إلى عملات الألعاب</p>
                           <div className="grid grid-cols-2 gap-3 mb-4">
-                              <button onClick={() => handleExchange(100)} className="bg-slate-700 p-3 rounded-xl hover:bg-slate-600">100 عملة</button>
-                              <button onClick={() => handleExchange(500)} className="bg-slate-700 p-3 rounded-xl hover:bg-slate-600">500 عملة</button>
-                              <button onClick={() => handleExchange(1000)} className="bg-slate-700 p-3 rounded-xl hover:bg-slate-600">1000 عملة</button>
-                              <button onClick={() => handleExchange(5000)} className="bg-slate-700 p-3 rounded-xl hover:bg-slate-600">5000 عملة</button>
+                              {[100, 500, 1000, 5000].map(amt => (
+                                  <button key={amt} onClick={() => handleExchange(amt)} className="bg-slate-700 p-3 rounded-xl hover:bg-slate-600">{amt} عملة</button>
+                              ))}
                           </div>
                           <button onClick={() => setShowExchange(false)} className="text-slate-400 underline">إلغاء</button>
                       </div>

@@ -3,7 +3,7 @@ import { Domino, DominoGameState, PlayerType, UserProfile, ChatMessage, VoiceEmo
 import { generateDeck, getValidMoves, calculateHandValue, orientTile } from '../utils';
 import { DominoTile } from '../components/DominoTile';
 import { playSound } from '../sounds';
-import { User, Cpu, AlertCircle, Loader2, Send, Smile, Volume2, Clock, XCircle, Trophy, Zap, Gift, HelpCircle, BookOpen } from 'lucide-react';
+import { User, Cpu, AlertCircle, Loader2, Send, Smile, Volume2, Clock, XCircle, Trophy, Zap, Gift, HelpCircle, BookOpen, Hand } from 'lucide-react';
 
 interface DominoGameProps {
   user: UserProfile;
@@ -44,8 +44,9 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
   // New UI States
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showTrophy, setShowTrophy] = useState<'gold' | 'silver' | null>(null);
 
-  const boardRef = useRef<HTMLDivElement>(null);
+  const boardContainerRef = useRef<HTMLDivElement>(null);
   const gameActiveRef = useRef(true); 
 
   useEffect(() => {
@@ -89,11 +90,6 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
       }));
   };
 
-  // Scroll board
-  useEffect(() => {
-    if (boardRef.current) boardRef.current.scrollLeft = (boardRef.current.scrollWidth - boardRef.current.clientWidth) / 2;
-  }, [gameState.board.length]);
-
   const startRound = () => {
     playSound('draw');
     const newDeck = generateDeck();
@@ -123,12 +119,12 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
         if (gameState.currentTurn === 'computer') {
             handleTurn('computer');
         } else if (gameState.currentTurn === 'human' && isAutoPlaying) {
-             // Delay slightly to feel natural
              setTimeout(() => handleTurn('human'), 1000);
         }
     }
   }, [gameState.currentTurn, gameState.status, isAutoPlaying, gameState.deck.length]); 
 
+  // Combined logic for computer and auto-player moves
   const handleTurn = (playerType: PlayerType) => {
     setTimeout(() => {
         if (!gameActiveRef.current) return;
@@ -143,7 +139,6 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
             // 1. Draw or Pass
             if (valid.length === 0) {
                 if (prev.deck.length > 0) {
-                     // Draw
                      const newDeck = [...prev.deck];
                      const drawn = newDeck.pop()!;
                      playSound('draw');
@@ -155,7 +150,6 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                          timeLeft: TURN_TIME
                      };
                 } else {
-                    // Pass
                     return {
                         ...prev,
                         currentTurn: playerType === 'human' ? 'computer' : 'human',
@@ -166,6 +160,7 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
             }
 
             // 2. Play Tile
+            // Simple AI: Play biggest double or biggest value
             valid.sort((a, b) => (b.left + b.right) - (a.left + a.right));
             const tile = valid[0];
 
@@ -182,6 +177,7 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                 const canLeft = tile.left === newEnds.left || tile.right === newEnds.left;
                 const canRight = tile.left === newEnds.right || tile.right === newEnds.right;
                 let side: 'left' | 'right' = 'right';
+                // Preference logic needed here for visual snake building, simplifying to basic append
                 if (canRight) side = 'right';
                 else if (canLeft) side = 'left';
 
@@ -199,8 +195,7 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
             const newHand = hand.filter(t => t.id !== tile.id);
 
             if (newHand.length === 0) {
-                playSound('win');
-                setTimeout(() => onEndGame(playerType, playerType === 'human' ? 100 : 0), 2000);
+                finishGame(playerType);
                 return {
                     ...prev,
                     board: newBoard,
@@ -262,8 +257,7 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
           const newHand = prev.players.human.hand.filter(t => t.id !== tile.id);
           
           if (newHand.length === 0) {
-              playSound('win');
-              setTimeout(() => onEndGame('human', 50), 2000);
+              finishGame('human');
               return {
                   ...prev,
                   board: newBoard,
@@ -287,12 +281,48 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
       });
   };
 
-  const buyAutoPlay = () => {
-      if(confirm('هل تريد شراء اللعب التلقائي بـ 200 عملة؟')) {
-          setHasAutoPlay(true);
-          setIsAutoPlaying(true);
-          onUpdateCoins(-200);
+  const manualDraw = () => {
+      if (gameState.currentTurn !== 'human' || isAutoPlaying || gameState.deck.length === 0) return;
+      
+      // Check if player actually has no moves
+      const validMoves = getValidMoves(gameState.players.human.hand, gameState.boardEnds.left, gameState.boardEnds.right);
+      if (validMoves.length > 0 && gameState.board.length > 0) {
+          alert("لديك نقلة متاحة!");
+          return;
       }
+
+      playSound('draw');
+      setGameState(prev => {
+          const newDeck = [...prev.deck];
+          const drawn = newDeck.pop()!;
+          return {
+              ...prev,
+              deck: newDeck,
+              players: { ...prev.players, human: { ...prev.players.human, hand: [...prev.players.human.hand, drawn] } },
+              message: 'تم سحب ورقة'
+          };
+      });
+  };
+
+  const finishGame = (winner: PlayerType) => {
+      playSound(winner === 'human' ? 'win' : 'lose');
+      setShowTrophy(winner === 'human' ? 'gold' : 'silver');
+  };
+
+  const toggleAutoPlay = () => {
+      if (!hasAutoPlay) {
+          if(confirm('هل تريد شراء اللعب التلقائي بـ 200 عملة؟')) {
+            setHasAutoPlay(true);
+            setIsAutoPlaying(true);
+            onUpdateCoins(-200);
+          }
+      } else {
+          setIsAutoPlaying(!isAutoPlaying);
+      }
+  };
+
+  const closeTrophy = () => {
+      onEndGame(showTrophy === 'gold' ? 'human' : 'computer', showTrophy === 'gold' ? 100 : 0);
   };
 
   // Chat & Gifts
@@ -309,7 +339,6 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
       if (isGift) {
           setFloatingEmote({ char: emote, type: 'gift', target: 'opponent' });
       } else {
-          // Send to "boneyard" area
           setFloatingEmote({ char: emote, type: soundType || 'emoji', target: 'boneyard' });
       }
 
@@ -320,27 +349,20 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
           type: isGift ? 'gift' : (isVoice ? 'voice_emoji' : 'emoji') 
       };
       setChatMessages(prev => [...prev, msg]);
-      
-      // Auto fade floating emote
       setTimeout(() => setFloatingEmote(null), 2000);
   };
 
-  // Visual Effect for Loss
-  const isLoser = gameState.winner === 'computer';
+  // Zoom scale calculation for board
+  // We want to fit 'N' tiles. Approx tile width is 60px.
+  // Board width is let's say 800px.
+  // If total tiles width > board width, scale down.
+  const boardWidth = gameState.board.length * 50; 
+  const containerWidth = boardContainerRef.current?.clientWidth || 800;
+  const scale = Math.min(1, containerWidth / boardWidth);
 
   return (
-    <div className={`flex flex-col h-full w-full relative overflow-hidden bg-slate-900 transition-all duration-1000 ${isLoser ? 'grayscale blur-[1px]' : ''}`}>
+    <div className={`flex flex-col h-full w-full relative overflow-hidden bg-slate-900`}>
         
-        {/* Loss Visual Overlay */}
-        {isLoser && (
-            <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center bg-red-900/30 animate-in fade-in duration-1000">
-                <div className="text-8xl animate-bounce">😢</div>
-                <h2 className="text-5xl font-black text-white drop-shadow-[0_5px_5px_rgba(255,0,0,0.8)] border-4 border-red-500 p-6 rounded-3xl bg-black/40 rotate-12 mt-4">
-                    حظ أوفر!
-                </h2>
-            </div>
-        )}
-
         {/* Header - Opponent Info & Controls */}
         <div className="flex justify-between items-center bg-slate-800/80 p-2 rounded-xl mb-1 backdrop-blur-sm border border-white/10 z-20 mx-2 mt-2">
             <div className="flex items-center gap-3 relative">
@@ -365,8 +387,8 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                      <BookOpen size={20} />
                  </button>
                  <button 
-                    onClick={hasAutoPlay ? () => setIsAutoPlaying(!isAutoPlaying) : buyAutoPlay}
-                    className={`p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse' : 'bg-slate-600') : 'bg-orange-500'}`}
+                    onClick={toggleAutoPlay}
+                    className={`p-2 rounded-full transition-all ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse ring-2 ring-green-300' : 'bg-slate-500') : 'bg-orange-500'}`}
                  >
                      <Zap size={20} className="text-white"/>
                  </button>
@@ -379,14 +401,19 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
         {/* Main Game Area */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative z-0">
              
-             {/* Left: Boneyard & Deck Info (Desktop) or Top (Mobile) */}
-             <div className="w-full md:w-32 bg-slate-800/50 p-2 flex md:flex-col gap-2 items-center justify-center border-r border-white/5 relative">
-                 <div className="text-slate-400 text-xs text-center font-bold mb-1">المخزون</div>
+             {/* Left: Boneyard */}
+             <div className="w-full md:w-24 bg-slate-800/50 p-2 flex md:flex-col gap-2 items-center justify-center border-r border-white/5 relative">
+                 <div className="text-slate-400 text-xs text-center font-bold mb-1">المخزون ({gameState.deck.length})</div>
                  <div className="bg-black/40 p-3 rounded-lg border border-white/10 flex md:flex-col gap-1 flex-wrap justify-center relative min-h-[60px]">
-                     {gameState.deck.map((_, i) => (
-                         <div key={i} className="w-4 h-8 bg-slate-300 rounded-[2px] border border-slate-500 shadow-sm"></div>
-                     ))}
-                     {gameState.deck.length === 0 && <span className="text-xs text-slate-500">فارغ</span>}
+                     {/* Show visual representation of stack size */}
+                     {gameState.deck.length > 0 ? (
+                         <div className="relative w-8 h-14 bg-slate-300 rounded border border-slate-500 shadow-lg">
+                             <div className="absolute -top-1 -right-1 w-full h-full bg-slate-300 rounded border border-slate-500 z-0"></div>
+                             {gameState.deck.length > 5 && <div className="absolute -top-2 -right-2 w-full h-full bg-slate-300 rounded border border-slate-500 z-[-1]"></div>}
+                         </div>
+                     ) : (
+                         <span className="text-xs text-slate-500">فارغ</span>
+                     )}
                      
                      {/* Boneyard Emote Target */}
                      {floatingEmote?.target === 'boneyard' && (
@@ -395,16 +422,33 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                          </div>
                      )}
                  </div>
+                 
+                 {/* Draw Button for User */}
+                 {gameState.deck.length > 0 && gameState.currentTurn === 'human' && !isAutoPlaying && (
+                     <button onClick={manualDraw} className="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-xs p-2 rounded w-full flex flex-col items-center animate-pulse">
+                         <Hand size={16}/> سحب
+                     </button>
+                 )}
              </div>
 
-             {/* Center: Board */}
+             {/* Center: Board - No Scroll, Scale to fit */}
              <div className="flex-1 flex items-center justify-center overflow-hidden relative bg-[#0f392b] border-[12px] border-[#3e2723] rounded-lg m-2 shadow-inner">
                  <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/felt.png')] pointer-events-none"></div>
-                 <div ref={boardRef} className="w-full h-full flex items-center overflow-x-auto overflow-y-hidden shadow-2xl relative z-10 px-12">
+                 <div 
+                    ref={boardContainerRef} 
+                    className="w-full h-full flex items-center justify-center relative z-10 transition-transform duration-300"
+                 >
                      {gameState.board.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-white/30 text-2xl font-bold pointer-events-none">انتظر النقلة الأولى...</div>}
-                     <div className="flex items-center m-auto space-x-1 space-x-reverse px-12 min-w-max"> 
+                     
+                     {/* The Board Chain */}
+                     <div 
+                        className="flex items-center justify-center transition-transform duration-500 ease-out"
+                        style={{ transform: `scale(${Math.max(0.4, Math.min(1, 15 / Math.max(1, gameState.board.length)))})` }}
+                     >
                         {gameState.board.map((tile) => (
-                             <DominoTile key={tile.id} left={tile.left} right={tile.right} orientation={tile.isDouble ? 'vertical' : 'horizontal'} size="md" highlight={lastPlayedTile === tile.id} />
+                             <div key={tile.id} className="mx-0.5">
+                                 <DominoTile left={tile.left} right={tile.right} orientation={tile.isDouble ? 'vertical' : 'horizontal'} size="md" highlight={lastPlayedTile === tile.id} />
+                             </div>
                         ))}
                      </div>
                  </div>
@@ -415,9 +459,7 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
         <div className="bg-slate-800/90 p-3 rounded-t-2xl border-t border-white/10 backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-20">
              <div className="flex justify-between items-center mb-2">
                  <div className="flex items-center gap-2">
-                     <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold border border-white">
-                         {user.name.charAt(0)}
-                     </div>
+                     <img src={user.avatar} className="w-8 h-8 rounded-full border border-white"/>
                      <div className="text-sm font-bold text-white">{user.name}</div>
                  </div>
                  <div className="text-xs text-yellow-400 flex items-center gap-1">
@@ -425,7 +467,7 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                  </div>
              </div>
 
-             <div className="flex overflow-x-auto gap-2 pb-2 min-h-[80px] items-center">
+             <div className="flex overflow-x-auto gap-2 pb-2 min-h-[80px] items-center custom-scroll">
                  {gameState.players.human.hand.map(tile => {
                      const valid = getValidMoves([tile], gameState.boardEnds.left, gameState.boardEnds.right).length > 0 || gameState.board.length === 0;
                      return (
@@ -475,9 +517,37 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                     <h3 className="text-xl font-bold mb-2 text-white">هل أنت متأكد من الخروج؟</h3>
                     <p className="text-slate-400 mb-6">سيتم اعتبارك خاسراً وستفقد نقاط الجولة.</p>
                     <div className="flex gap-4">
-                        <button onClick={() => onEndGame(null, 0)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold">خروج</button>
+                        <button onClick={() => onEndGame(null, 0)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold">تأكيد الخروج</button>
                         <button onClick={() => setShowExitConfirm(false)} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-3 rounded-xl font-bold">إلغاء</button>
                     </div>
+                </div>
+            </div>
+        )}
+
+        {/* Trophy Modal */}
+        {showTrophy && (
+            <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 animate-in zoom-in duration-300">
+                <div className="bg-gradient-to-b from-slate-800 to-slate-900 p-8 rounded-3xl border-4 border-yellow-500/50 text-center max-w-sm w-full relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+                    
+                    {showTrophy === 'gold' ? (
+                        <>
+                            <Trophy size={100} className="mx-auto text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce mb-4" />
+                            <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 mb-2">الفائز!</h2>
+                            <p className="text-yellow-100 text-lg mb-6">أداء مذهل يا {user.name}!</p>
+                            <div className="text-2xl font-bold text-emerald-400 mb-8">+100 عملة</div>
+                        </>
+                    ) : (
+                        <>
+                            <Trophy size={100} className="mx-auto text-slate-400 drop-shadow-[0_0_30px_rgba(148,163,184,0.6)] mb-4" />
+                            <h2 className="text-4xl font-black text-slate-300 mb-2">المركز الثاني</h2>
+                            <p className="text-slate-400 text-lg mb-6">حظ أوفر في المرة القادمة!</p>
+                        </>
+                    )}
+                    
+                    <button onClick={closeTrophy} className="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-xl shadow-lg relative z-10">
+                        استمرار
+                    </button>
                 </div>
             </div>
         )}
@@ -493,8 +563,8 @@ export const DominoGame: React.FC<DominoGameProps> = ({ user, opponentName, onEn
                     <div className="text-slate-300 text-right space-y-2 text-sm max-h-[60vh] overflow-y-auto">
                         <p>1. الهدف: التخلص من جميع أحجار الدومينو في يدك قبل الخصم.</p>
                         <p>2. اللعب: طابق عدد النقاط في أحد طرفي الحجر مع طرف مفتوح على الطاولة.</p>
-                        <p>3. السحب: إذا لم يكن لديك نقلة، يجب عليك السحب من المخزون حتى تجد حجراً مناسباً.</p>
-                        <p>4. الفوز: يفوز اللاعب الذي ينهي أحجاره أولاً. إذا أغلقت اللعبة (لا يوجد نقلات للطرفين)، يفوز صاحب مجموع النقاط الأقل.</p>
+                        <p>3. السحب: إذا لم يكن لديك نقلة، استخدم زر السحب.</p>
+                        <p>4. الفوز: يفوز اللاعب الذي ينهي أحجاره أولاً.</p>
                     </div>
                     <button onClick={() => setShowHelp(false)} className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold">فهمت</button>
                 </div>

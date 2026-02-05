@@ -3,14 +3,13 @@ import { Card, CardGameState, UserProfile, Player, ChatMessage, VoiceEmote } fro
 import { generateCardDeck } from '../utils';
 import { PlayingCard } from '../components/PlayingCard';
 import { playSound } from '../sounds';
-import { Clock, XCircle, ArrowRight, Loader2, Zap, Smile, Volume2, Send, Gift } from 'lucide-react';
+import { Clock, XCircle, ArrowRight, Loader2, Zap, Smile, Volume2, Send, Gift, AlertCircle, Trophy } from 'lucide-react';
 
 interface CardGameProps {
   user: UserProfile;
   onEndGame: (winner: boolean, coins: number) => void;
 }
 
-// "Professional Ordinary Card Game" - Simple Crazy Eights / Shedding style
 export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
   const [state, setState] = useState<CardGameState>({
     deck: [],
@@ -27,8 +26,10 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
   const [hasAutoPlay, setHasAutoPlay] = useState(false);
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [showEmotes, setShowEmotes] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [floatingEmote, setFloatingEmote] = useState<{char: string, target?: string} | null>(null);
+  
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showTrophy, setShowTrophy] = useState<'gold' | 'silver' | null>(null);
 
   useEffect(() => {
     initGame();
@@ -79,7 +80,6 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
 
   const playCard = (card: Card) => {
       const topCard = state.discardPile[state.discardPile.length - 1];
-      // Validation: Match Suit OR Match Rank OR Card is 8 (Wild)
       const isValid = card.suit === topCard.suit || card.rank === topCard.rank || card.rank === '8';
       
       if (isValid) {
@@ -88,11 +88,8 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
           const newHand = currentPlayer.cardHand.filter(c => c.id !== card.id);
           const newDiscard = [...state.discardPile, card];
 
-          // Check Win
           if (newHand.length === 0) {
-              const won = currentPlayer.type === 'human';
-              playSound(won ? 'win' : 'lose');
-              onEndGame(won, won ? 500 : 20);
+              finishGame(currentPlayer.type === 'human');
               return;
           }
 
@@ -106,13 +103,11 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
               currentTurnIndex: (prev.currentTurnIndex + 1) % 4,
               message: `دور ${prev.players[(prev.currentTurnIndex + 1) % 4].name}`
           }));
-      } else {
-          // alert('حركة غير صالحة'); // Too intrusive, just ignore
       }
   };
 
   const drawCard = () => {
-      if (state.deck.length === 0) return; // Empty deck logic (usually reshuffle discard)
+      if (state.deck.length === 0) return; 
       playSound('draw');
       const newDeck = [...state.deck];
       const card = newDeck.pop()!;
@@ -131,7 +126,6 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
   const playBotTurn = () => {
       const topCard = state.discardPile[state.discardPile.length - 1];
       const currentPlayer = state.players[state.currentTurnIndex];
-      
       const validCard = currentPlayer.cardHand.find(c => c.suit === topCard.suit || c.rank === topCard.rank || c.rank === '8');
       
       if (validCard) {
@@ -141,11 +135,24 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
       }
   };
 
-  const buyAutoPlay = () => {
-      if(confirm('شراء اللعب التلقائي بـ 200 عملة؟')) {
-          setHasAutoPlay(true);
-          setIsAutoPlaying(true);
+  const toggleAutoPlay = () => {
+      if (!hasAutoPlay) {
+          if(confirm('شراء اللعب التلقائي بـ 200 عملة؟')) {
+              setHasAutoPlay(true);
+              setIsAutoPlaying(true);
+          }
+      } else {
+          setIsAutoPlaying(!isAutoPlaying);
       }
+  };
+
+  const finishGame = (won: boolean) => {
+      playSound(won ? 'win' : 'lose');
+      setShowTrophy(won ? 'gold' : 'silver');
+  };
+
+  const closeTrophy = () => {
+      onEndGame(showTrophy === 'gold', showTrophy === 'gold' ? 500 : 20);
   };
 
   // Chat
@@ -201,8 +208,8 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
 
         {/* UI Overlay */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
-            <button onClick={() => onEndGame(false, 0)} className="bg-red-500/20 text-red-200 p-2 rounded-full"><XCircle/></button>
-            <button onClick={hasAutoPlay ? () => setIsAutoPlaying(!isAutoPlaying) : buyAutoPlay} className={`p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500' : 'bg-slate-600') : 'bg-orange-500'}`}>
+            <button onClick={() => setShowExitConfirm(true)} className="bg-red-500/20 text-red-200 p-2 rounded-full"><XCircle/></button>
+            <button onClick={toggleAutoPlay} className={`p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 ring-2 ring-green-300' : 'bg-slate-600') : 'bg-orange-500'}`}>
                 <Zap className="text-white" size={20}/>
             </button>
             <button onClick={() => setShowEmotes(!showEmotes)} className="p-2 bg-slate-700 rounded-full text-yellow-400"><Smile size={20}/></button>
@@ -217,6 +224,40 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
                      <button onClick={() => sendEmote('😡')} className="text-2xl">😡</button>
                      <button onClick={() => setShowEmotes(false)} className="text-sm text-red-400">إغلاق</button>
                  </div>
+            </div>
+        )}
+
+        {/* Exit Modal */}
+        {showExitConfirm && (
+            <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+                <div className="bg-slate-800 p-6 rounded-2xl border border-white/10 max-w-sm w-full text-center">
+                    <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
+                    <h3 className="text-xl font-bold mb-2 text-white">هل أنت متأكد من الخروج؟</h3>
+                    <div className="flex gap-4 mt-6">
+                        <button onClick={() => onEndGame(false, 0)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold">تأكيد الخروج</button>
+                        <button onClick={() => setShowExitConfirm(false)} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-3 rounded-xl font-bold">إلغاء</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Trophy Modal */}
+        {showTrophy && (
+            <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 animate-in zoom-in duration-300">
+                <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500/50 text-center max-w-sm w-full">
+                    {showTrophy === 'gold' ? (
+                        <>
+                            <Trophy size={100} className="mx-auto text-yellow-400 animate-bounce mb-4" />
+                            <h2 className="text-4xl font-black text-yellow-300 mb-2">الفائز!</h2>
+                        </>
+                    ) : (
+                        <>
+                            <Trophy size={100} className="mx-auto text-slate-400 mb-4" />
+                            <h2 className="text-4xl font-black text-slate-300 mb-2">خسارة</h2>
+                        </>
+                    )}
+                    <button onClick={closeTrophy} className="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-xl shadow-lg mt-6">استمرار</button>
+                </div>
             </div>
         )}
     </div>

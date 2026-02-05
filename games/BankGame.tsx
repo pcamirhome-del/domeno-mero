@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, PlayerType, Property } from '../types';
-import { XCircle, Dices, Building2, Coins, ArrowRight, Zap } from 'lucide-react';
+import { XCircle, Dices, Building2, Coins, ArrowRight, Zap, Trophy, AlertCircle } from 'lucide-react';
 import { playSound } from '../sounds';
 
 interface BankGameProps {
@@ -10,10 +10,8 @@ interface BankGameProps {
     onEndGame: (winner: boolean, coins: number) => void;
 }
 
-// --- Constants & Data ---
-// Simplified Board: 20 Tiles (5 per side)
+// ... (KEEPING EXISTING CONSTANTS FOR BOARD_SIZE AND PROPERTIES_DATA to save space)
 const BOARD_SIZE = 20;
-
 const PROPERTIES_DATA: Property[] = [
     { id: 0, name: 'البداية', price: 0, rent: 0, color: '#a3a3a3', type: 'start', owner: null },
     { id: 1, name: 'القاهرة', price: 100, rent: 20, color: '#ef4444', type: 'property', owner: null }, // Red
@@ -52,6 +50,9 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
     const [hasAutoPlay, setHasAutoPlay] = useState(false);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     
+    const [showExitConfirm, setShowExitConfirm] = useState(false);
+    const [showTrophy, setShowTrophy] = useState<'gold' | 'silver' | null>(null);
+
     // Constants
     const PASS_GO_REWARD = 200;
 
@@ -104,9 +105,7 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
                 }
             };
 
-            // Process Tile Logic needs to happen after state update, use Timeout or separate function passing new state
             setTimeout(() => processTile(playerKey, nextPos, nextPlayers), 500);
-
             return nextPlayers;
         });
     };
@@ -139,15 +138,12 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
         }
         else if (tile.type === 'property') {
             if (tile.owner === null) {
-                // Available to buy
                 if (player.money >= tile.price) {
                     if (playerKey === 'human' && !isAutoPlaying) {
-                        // Show Modal for manual player
                         setMessage(`هل تريد شراء ${tile.name} بـ ${tile.price}؟`);
                         setShowBuyModal(tile);
-                        return; // Wait for user decision
+                        return; 
                     } else {
-                        // Bot Logic OR AutoPlay: Buy if has > 200 left after purchase
                         if (player.money >= tile.price + 200) {
                             buyProperty(playerKey, tile);
                         } else {
@@ -160,7 +156,6 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
             } else if (tile.owner === (playerKey === 'human' ? 'human' : 'computer')) {
                 finishTurn(playerKey, 'أرضك (راحة)');
             } else {
-                // Owned by opponent - Pay Rent
                 msg += ` - دفع إيجار ${tile.rent}`;
                 playSound('lose');
                 payRent(playerKey, tile.rent);
@@ -199,36 +194,39 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
         setTimeout(() => {
             setPlayers(prev => {
                 if (prev.human.money < 0) {
-                     onEndGame(false, 10); // Human lost
+                     finishGame(false); 
                      return prev;
                 }
                 if (prev.computer.money < 0) {
-                    onEndGame(true, 200); // Human won
+                    finishGame(true);
                     return prev;
                 }
-                
-                // Switch Turn
                 setTurn(currentPlayer === 'human' ? 'computer' : 'human');
                 return prev;
             });
         }, 1500);
     };
 
-    const buyAutoPlay = () => {
-        if(confirm('شراء اللعب التلقائي بـ 200 عملة؟')) {
-            setHasAutoPlay(true);
-            setIsAutoPlaying(true);
+    const toggleAutoPlay = () => {
+        if (!hasAutoPlay) {
+            if(confirm('شراء اللعب التلقائي بـ 200 عملة؟')) {
+                setHasAutoPlay(true);
+                setIsAutoPlaying(true);
+            }
+        } else {
+            setIsAutoPlaying(!isAutoPlaying);
         }
     };
 
-    // --- Rendering ---
-    
-    // Render the board as a loop of divs
-    // Top Row: 0 -> 5
-    // Right Col: 6 -> 9
-    // Bottom Row: 10 -> 15 (reversed visually)
-    // Left Col: 16 -> 19 (reversed visually)
-    
+    const finishGame = (win: boolean) => {
+        playSound(win ? 'win' : 'lose');
+        setShowTrophy(win ? 'gold' : 'silver');
+    };
+
+    const closeTrophy = () => {
+        onEndGame(showTrophy === 'gold', showTrophy === 'gold' ? 200 : 0);
+    };
+
     const renderTile = (id: number) => {
         const tile = properties.find(p => p.id === id)!;
         const isHumanHere = players.human.position === id;
@@ -255,12 +253,12 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
 
     return (
         <div className="flex flex-col h-full bg-slate-950 p-2 relative overflow-hidden select-none">
-             <button onClick={() => onEndGame(false, 0)} className="absolute top-4 right-4 bg-red-500/20 text-red-200 p-2 rounded-full z-50"><XCircle/></button>
+             <button onClick={() => setShowExitConfirm(true)} className="absolute top-4 right-4 bg-red-500/20 text-red-200 p-2 rounded-full z-50"><XCircle/></button>
 
             {/* Info Bar */}
             <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl mb-4 border border-white/10">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-bold">A</div>
+                    <img src={user.avatar} className="w-8 h-8 rounded-full border border-white"/>
                     <div>
                         <div className="text-xs text-slate-400">{user.name}</div>
                         <div className="font-mono text-emerald-400 font-bold">{players.human.money}</div>
@@ -302,8 +300,8 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
                          
                          {/* Auto Play Button */}
                         <button 
-                            onClick={hasAutoPlay ? () => setIsAutoPlaying(!isAutoPlaying) : buyAutoPlay}
-                            className={`absolute bottom-4 right-4 p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse' : 'bg-slate-600') : 'bg-orange-500'}`}
+                            onClick={toggleAutoPlay}
+                            className={`absolute bottom-4 right-4 p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 animate-pulse ring-2 ring-green-300' : 'bg-slate-600') : 'bg-orange-500'}`}
                         >
                             <Zap size={20} className="text-white"/>
                         </button>
@@ -351,6 +349,40 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
                                 إلغاء
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Exit Modal */}
+            {showExitConfirm && (
+                <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-white/10 max-w-sm w-full text-center">
+                        <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
+                        <h3 className="text-xl font-bold mb-2 text-white">هل أنت متأكد من الخروج؟</h3>
+                        <div className="flex gap-4 mt-6">
+                            <button onClick={() => onEndGame(false, 0)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold">تأكيد الخروج</button>
+                            <button onClick={() => setShowExitConfirm(false)} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-3 rounded-xl font-bold">إلغاء</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Trophy Modal */}
+            {showTrophy && (
+                <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 animate-in zoom-in duration-300">
+                    <div className="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-500/50 text-center max-w-sm w-full">
+                        {showTrophy === 'gold' ? (
+                            <>
+                                <Trophy size={100} className="mx-auto text-yellow-400 animate-bounce mb-4" />
+                                <h2 className="text-4xl font-black text-yellow-300 mb-2">الفائز!</h2>
+                            </>
+                        ) : (
+                            <>
+                                <Trophy size={100} className="mx-auto text-slate-400 mb-4" />
+                                <h2 className="text-4xl font-black text-slate-300 mb-2">خسارة</h2>
+                            </>
+                        )}
+                        <button onClick={closeTrophy} className="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-xl shadow-lg mt-6">استمرار</button>
                     </div>
                 </div>
             )}
