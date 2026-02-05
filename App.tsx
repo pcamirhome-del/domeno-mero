@@ -52,21 +52,25 @@ const App: React.FC = () => {
   };
 
   // --- Reward Ads Logic ---
+  // دالة إضافة العملات
   const giveReward = (amount: number) => {
       const newUser = { ...user, globalCoins: user.globalCoins + amount };
       setUser(newUser);
       localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
+      // alert("مبروك! تمت إضافة " + amount + " عملة لرصيدك. رصيدك الحالي: " + userCoins);
       alert("مبروك! تمت إضافة " + amount + " عملة لرصيدك. رصيدك الحالي: " + newUser.globalCoins);
       playSound('win');
   };
 
+  // دالة تشغيل الإعلان (Rewarded Ad Logic)
   const launchRewardedAd = () => {
-      // محاكاة انتهاء الإعلان بنجاح
-      // في الواقع، AdMob يرسل تنبيهاً عندما يكمل المستخدم المشاهدة
-      // Using 'any' to bypass TS check for global adsbygoogle
-      if (typeof (window as any).adsbygoogle !== 'undefined' || true) { // Always allow simulation for now to show UI working
+      // هنا نقوم باستدعاء وحدة الإعلان الخاصة بك
+      // ملاحظة: مع AdMob للويب يتم استخدام أداة تهيئة معينة
+      if (typeof (window as any).adsbygoogle !== 'undefined') {
           alert("جاري تحميل الإعلان... (سيظهر الإعلان هنا بمجرد قبول حسابك)");
           
+          // محاكاة انتهاء الإعلان بنجاح
+          // في الواقع، AdMob يرسل تنبيهاً عندما يكمل المستخدم المشاهدة
           setTimeout(() => {
               giveReward(50); // منح المكافأة
           }, 2000); 
@@ -75,6 +79,7 @@ const App: React.FC = () => {
       }
   };
 
+  // دالة تظهر الاشعار للاعب
   const showRewardPrompt = () => {
       const confirmation = confirm("هل تريد زيادة عملاتك؟ شاهد مقطع فيديو قصير واربح 50 عملة مجانية!");
       if (confirmation) {
