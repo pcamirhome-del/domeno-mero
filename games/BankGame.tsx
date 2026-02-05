@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserProfile, PlayerType, Property } from '../types';
-import { XCircle, Dices, Building2, Coins, ArrowRight, Zap, Trophy, AlertCircle } from 'lucide-react';
+import { UserProfile, PlayerType, Property, ChatMessage } from '../types';
+import { XCircle, Dices, Building2, Coins, ArrowRight, Zap, Trophy, AlertCircle, Send, Smile } from 'lucide-react';
 import { playSound } from '../sounds';
 
 interface BankGameProps {
@@ -10,7 +10,6 @@ interface BankGameProps {
     onEndGame: (winner: boolean, coins: number) => void;
 }
 
-// ... (KEEPING EXISTING CONSTANTS FOR BOARD_SIZE AND PROPERTIES_DATA to save space)
 const BOARD_SIZE = 20;
 const PROPERTIES_DATA: Property[] = [
     { id: 0, name: 'البداية', price: 0, rent: 0, color: '#a3a3a3', type: 'start', owner: null },
@@ -50,10 +49,14 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
     const [hasAutoPlay, setHasAutoPlay] = useState(false);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     
+    // Chat State
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [showEmotes, setShowEmotes] = useState(false);
+    
     const [showExitConfirm, setShowExitConfirm] = useState(false);
     const [showTrophy, setShowTrophy] = useState<'gold' | 'silver' | null>(null);
 
-    // Constants
     const PASS_GO_REWARD = 200;
 
     // AutoPlay & Bot Turn Effect
@@ -227,6 +230,14 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
         onEndGame(showTrophy === 'gold', showTrophy === 'gold' ? 200 : 0);
     };
 
+    // Chat
+    const sendChat = (text: string) => {
+        if (!text.trim()) return;
+        const msg: ChatMessage = { id: Date.now().toString(), sender: user.name, text, type: 'text' };
+        setChatMessages(prev => [...prev, msg]);
+        setChatInput('');
+    };
+
     const renderTile = (id: number) => {
         const tile = properties.find(p => p.id === id)!;
         const isHumanHere = players.human.position === id;
@@ -325,6 +336,26 @@ export const BankGame: React.FC<BankGameProps> = ({ user, opponentName, isBot, o
                          {[16,17,18,19].map(i => <div key={i} className="flex-1 w-full border-t border-slate-700">{renderTile(i)}</div>)}
                      </div>
                 </div>
+            </div>
+
+            {/* Bottom Left Chat */}
+            <div className="absolute bottom-4 left-4 z-40 w-full max-w-xs flex flex-col gap-2 pointer-events-none">
+                 {/* Log */}
+                 <div className="flex flex-col-reverse gap-1 items-start h-24 overflow-hidden mb-1 pl-1">
+                    {chatMessages.slice(-4).reverse().map((msg, i) => (
+                        <div key={msg.id} className="bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-lg text-xs animate-in slide-in-from-left fade-in">
+                            <span className="font-bold text-emerald-400">{msg.sender}:</span> {msg.text}
+                        </div>
+                    ))}
+                 </div>
+                 {/* Input */}
+                 <div className="flex items-center gap-2 pointer-events-auto pr-8">
+                      <div className="flex-1 flex bg-slate-900/90 rounded-full px-3 py-2 items-center border border-slate-700">
+                          <input className="bg-transparent border-none outline-none text-white text-sm flex-1" placeholder="اكتب..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChat(chatInput)} />
+                          <button onClick={() => sendChat(chatInput)} className="text-emerald-400"><Send size={16}/></button>
+                      </div>
+                      <button onClick={() => setShowEmotes(!showEmotes)} className="bg-slate-700 p-2 rounded-full text-yellow-400 hover:bg-slate-600"><Smile size={20}/></button>
+                 </div>
             </div>
 
             {/* Buy Modal */}

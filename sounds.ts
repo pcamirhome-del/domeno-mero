@@ -1,3 +1,4 @@
+
 // Sound Manager using Real Audio Files
 // Using reliable CDN links for sound effects
 
@@ -20,14 +21,23 @@ const sounds = {
       audioCache[key] = audio;
   });
   
-  export const playSound = (type: 'place' | 'draw' | 'win' | 'lose' | 'laugh' | 'angry' | 'kiss') => {
+  export const playSound = (type: 'place' | 'place_left' | 'place_right' | 'draw' | 'win' | 'lose' | 'laugh' | 'angry' | 'kiss') => {
     try {
-      const audio = audioCache[type];
+      // Map variants to base sounds
+      let baseType = type;
+      if (type === 'place_left' || type === 'place_right') baseType = 'place';
+
+      const audio = audioCache[baseType];
       if (audio) {
         audio.currentTime = 0;
-        // Randomize pitch slightly for repetitive sounds like placing tiles
-        if (type === 'place') {
-            audio.playbackRate = 0.9 + Math.random() * 0.2;
+        
+        // Pitch variation logic for distinct placement sounds
+        if (type === 'place_left') {
+            audio.playbackRate = 0.75; // Lower pitch/slower for left
+        } else if (type === 'place_right') {
+            audio.playbackRate = 1.25; // Higher pitch/faster for right
+        } else if (type === 'place') {
+            audio.playbackRate = 1;
         } else {
             audio.playbackRate = 1;
         }

@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { UserProfile } from '../types';
-import { XCircle, RefreshCw, Zap, Trophy, AlertCircle, Clock, BookOpen, Crown } from 'lucide-react';
+import { UserProfile, ChatMessage, VoiceEmote } from '../types';
+import { XCircle, RefreshCw, Zap, Trophy, AlertCircle, Clock, BookOpen, Crown, Send, Smile } from 'lucide-react';
 import { playSound } from '../sounds';
 
 interface ChessGameProps {
@@ -45,6 +46,12 @@ export const ChessGame: React.FC<ChessGameProps> = ({ user, opponentName, isBot,
     const [hasAutoPlay, setHasAutoPlay] = useState(false);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     
+    // Chat State
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [showEmotes, setShowEmotes] = useState(false);
+    const [floatingEmote, setFloatingEmote] = useState<{char: string, type: string} | null>(null);
+
     // UI
     const [showExitConfirm, setShowExitConfirm] = useState(false);
     const [showTrophy, setShowTrophy] = useState<'gold' | 'silver' | null>(null);
@@ -230,18 +237,6 @@ export const ChessGame: React.FC<ChessGameProps> = ({ user, opponentName, isBot,
         
         // Check Status
         if (isCheck(newBoard, nextTurn)) {
-            // Checkmate detection (naive: look for any valid move)
-            let hasMove = false;
-            for(let i=0; i<8; i++) {
-                for(let j=0; j<8; j++) {
-                    if (newBoard[i][j]?.color === nextTurn) {
-                        // We need to use the newBoard state logic here, simplistic recursion avoidance
-                        // For this demo, simply marking check
-                    }
-                }
-            }
-            // For true checkmate logic we need to re-run getSafeMoves on the new board state
-            // Let's rely on basic check indication for UI
             setGameStatus('check');
             playSound('angry');
         } else {
@@ -306,6 +301,32 @@ export const ChessGame: React.FC<ChessGameProps> = ({ user, opponentName, isBot,
         onEndGame(showTrophy === 'gold', showTrophy === 'gold' ? 300 : 0);
     };
 
+    // Chat
+    const sendChat = (text: string) => {
+        if (!text.trim()) return;
+        const msg: ChatMessage = { id: Date.now().toString(), sender: user.name, text, type: 'text' };
+        setChatMessages(prev => [...prev, msg]);
+        setChatInput('');
+    };
+
+    const sendEmote = (emote: string, isVoice: boolean, soundType?: VoiceEmote, isGift = false) => {
+      if (isVoice && soundType) playSound(soundType);
+
+      // Set floating emote to show in center
+      setFloatingEmote({ char: emote, type: isGift ? 'gift' : 'emoji' });
+      
+      const msg: ChatMessage = { 
+          id: Date.now().toString(), 
+          sender: user.name, 
+          emoji: emote, 
+          type: isGift ? 'gift' : (isVoice ? 'voice_emoji' : 'emoji') 
+      };
+      setChatMessages(prev => [...prev, msg]);
+      
+      // Clear after 2 seconds
+      setTimeout(() => setFloatingEmote(null), 2000);
+    };
+
     // Render Helpers
     const getSquareColor = (r: number, c: number) => {
         const isDark = (r + c) % 2 === 1;
@@ -317,6 +338,15 @@ export const ChessGame: React.FC<ChessGameProps> = ({ user, opponentName, isBot,
     return (
         <div className="flex flex-col h-full bg-[#1e1e1e] p-2 items-center relative overflow-hidden">
              
+             {/* Center Screen Floating Emote Overlay */}
+             {floatingEmote && (
+                 <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none animate-in zoom-in fade-in duration-300">
+                     <div className="text-9xl drop-shadow-[0_0_25px_rgba(255,255,255,0.5)] animate-bounce">
+                         {floatingEmote.char}
+                     </div>
+                 </div>
+             )}
+
              {/* Header */}
              <div className="w-full flex justify-between items-center bg-slate-800 p-2 rounded-xl mb-4 border border-white/10 z-20 shadow-xl">
                  <div className="flex items-center gap-3">
@@ -332,7 +362,7 @@ export const ChessGame: React.FC<ChessGameProps> = ({ user, opponentName, isBot,
                     {gameStatus === 'check' && <div className="text-red-500 text-xs font-bold animate-pulse">CHECK!</div>}
                  </div>
 
-                 <div className="flex items-center gap-3">
+                 <div className="flex items-center gap-3 relative">
                      <div className="text-right">
                          <div className="text-sm font-bold text-white">{opponentName}</div>
                          <div className="text-xs text-slate-400">Bot (Level 5)</div>
@@ -395,6 +425,37 @@ export const ChessGame: React.FC<ChessGameProps> = ({ user, opponentName, isBot,
                      <Zap size={20} className="text-white"/>
                  </button>
              </div>
+
+             {/* Bottom Left Chat */}
+             <div className="absolute bottom-4 left-4 z-40 w-full max-w-xs flex flex-col gap-2 pointer-events-none">
+                 {/* Log */}
+                 <div className="flex flex-col-reverse gap-1 items-start h-24 overflow-hidden mb-1 pl-1">
+                    {chatMessages.slice(-4).reverse().map((msg, i) => (
+                        <div key={msg.id} className="bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-lg text-xs animate-in slide-in-from-left fade-in">
+                            <span className="font-bold text-emerald-400">{msg.sender}:</span> {msg.emoji || msg.text}
+                        </div>
+                    ))}
+                 </div>
+                 {/* Input */}
+                 <div className="flex items-center gap-2 pointer-events-auto pr-8">
+                      <div className="flex-1 flex bg-slate-900/90 rounded-full px-3 py-2 items-center border border-slate-700">
+                          <input className="bg-transparent border-none outline-none text-white text-sm flex-1" placeholder="اكتب..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChat(chatInput)} />
+                          <button onClick={() => sendChat(chatInput)} className="text-emerald-400"><Send size={16}/></button>
+                      </div>
+                      <button onClick={() => setShowEmotes(!showEmotes)} className="bg-slate-700 p-2 rounded-full text-yellow-400 hover:bg-slate-600"><Smile size={20}/></button>
+                 </div>
+             </div>
+
+             {/* Emote Menu */}
+             {showEmotes && (
+                 <div className="absolute bottom-12 right-0 bg-slate-800 border border-slate-600 rounded-xl p-2 grid grid-cols-4 gap-2 shadow-2xl z-50 animate-in zoom-in slide-in-from-bottom-5">
+                     {['😀','👍','👋','❤️'].map(e => <button key={e} onClick={() => sendEmote(e, false)} className="text-2xl hover:scale-125 transition-transform">{e}</button>)}
+                     <button onClick={() => sendEmote('🤣', true, 'laugh')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>🤣</button>
+                     <button onClick={() => sendEmote('😡', true, 'angry')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>😡</button>
+                     <button onClick={() => sendEmote('💋', true, 'kiss')} className="text-2xl"><span className="text-xs absolute top-0 right-0">مجاني</span>💋</button>
+                     <button onClick={() => sendEmote('🌹', false, undefined, true)} className="text-2xl bg-red-900/50 rounded">🌹</button>
+                 </div>
+             )}
 
              {/* Exit Modal */}
              {showExitConfirm && (

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppView } from './types';
 import { DominoGame } from './games/DominoGame';
@@ -5,8 +6,9 @@ import { CardGame } from './games/CardGame';
 import { LudoGame } from './games/LudoGame';
 import { BankGame } from './games/BankGame';
 import { ChessGame } from './games/ChessGame';
-import { User, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, RefreshCw, Settings, Volume2, Smartphone, Trash2, Save, Heart, X, Youtube, LogOut, CheckCircle, Edit2, Castle } from 'lucide-react';
+import { User, Gamepad2, Coins, Trophy, Grid3X3, Bot, Share2, Building2, Star, RefreshCw, Settings, Volume2, Smartphone, Trash2, Save, Heart, X, Youtube, LogOut, CheckCircle, Edit2, Castle, Lock, KeyRound, Loader2 } from 'lucide-react';
 import { playSound } from './sounds';
+import { db, ref, get, set, child, update } from './firebase';
 
 const AVATARS = Array.from({ length: 20 }, (_, i) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${i * 1234}&backgroundColor=b6e3f4`);
 
@@ -15,11 +17,19 @@ const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile>({ 
       name: '', 
       avatar: AVATARS[0],
-      globalCoins: 10000, 
+      globalCoins: 1000, 
       level: 1, 
       xp: 0,
       settings: { musicEnabled: true, vibrationEnabled: true }
   });
+  
+  // Login State
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+
   const [lobbyCode, setLobbyCode] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [opponentName, setOpponentName] = useState('الكمبيوتر');
@@ -32,59 +42,152 @@ const App: React.FC = () => {
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [selectedAvatarIndex, setSelectedAvatarIndex] = useState(0);
 
-  // --- Persistence ---
+  // Check local session
   useEffect(() => {
-      const savedData = localStorage.getItem('mir_domino_user');
-      if (savedData) {
-          const parsed = JSON.parse(savedData);
-          setUser({ ...parsed, avatar: parsed.avatar || AVATARS[0] }); // Ensure avatar exists
-          setView('menu');
-          setWelcomeMessage(`مرحباً بعودتك، ${parsed.name}!`);
-          setTimeout(() => setWelcomeMessage(''), 2000);
+      const savedUser = localStorage.getItem('mir_domino_active_user');
+      if (savedUser) {
+          try {
+              const parsed = JSON.parse(savedUser);
+              // Verify with DB silently or just load
+              setUser(parsed);
+              setView('menu');
+          } catch(e) {
+              localStorage.removeItem('mir_domino_active_user');
+          }
       }
   }, []);
 
-  const saveData = () => {
-      localStorage.setItem('mir_domino_user', JSON.stringify(user));
-      alert('تم حفظ البيانات بنجاح!');
+  const handleAuth = async () => {
+      if (!usernameInput.trim() || !passwordInput.trim()) {
+          setAuthError('يرجى ملء جميع الحقول');
+          return;
+      }
+      setIsLoading(true);
+      setAuthError('');
+
+      const safeUsername = usernameInput.trim().replace(/[.#$/[\]]/g, ''); // Sanitize for Firebase keys
+      if (!safeUsername) {
+          setAuthError('اسم المستخدم غير صالح');
+          setIsLoading(false);
+          return;
+      }
+
+      const dbRef = ref(db);
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Timeout")), 10000)
+      );
+
+      try {
+          // Race between DB operation and timeout
+          await Promise.race([
+             (async () => {
+                  const snapshot = await get(child(dbRef, `users/${safeUsername}`));
+                  
+                  if (isRegistering) {
+                      // Register
+                      if (snapshot.exists()) {
+                          throw new Error('اسم المستخدم مسجل بالفعل');
+                      }
+
+                      const newUser: UserProfile & { password?: string } = {
+                          name: usernameInput.trim(),
+                          avatar: AVATARS[selectedAvatarIndex],
+                          globalCoins: 5000, // Bonus for new registration
+                          level: 1,
+                          xp: 0,
+                          settings: { musicEnabled: true, vibrationEnabled: true }
+                      };
+
+                      // Store password (Note: In production, use Firebase Auth. Storing in DB for this demo as requested)
+                      await set(ref(db, `users/${safeUsername}`), {
+                          ...newUser,
+                          password: passwordInput 
+                      });
+
+                      loginSuccess(newUser);
+                  } else {
+                      // Login
+                      if (!snapshot.exists()) {
+                          throw new Error('اسم المستخدم غير موجود');
+                      }
+
+                      const userData = snapshot.val();
+                      if (userData.password !== passwordInput) {
+                          throw new Error('كلمة المرور غير صحيحة');
+                      }
+
+                      loginSuccess(userData);
+                  }
+             })(),
+             timeoutPromise
+          ]);
+      } catch (error: any) {
+          console.error(error);
+          if (error.message === "Timeout") {
+              setAuthError('تعذر الاتصال بالخادم. تحقق من الإنترنت.');
+          } else {
+              setAuthError(error.message || 'حدث خطأ في الاتصال');
+          }
+          setIsLoading(false);
+      }
+  };
+
+  const loginSuccess = (userData: any) => {
+      // Remove sensitive data before state/local storage
+      const cleanUser = { ...userData };
+      delete cleanUser.password;
+      
+      setUser(cleanUser);
+      localStorage.setItem('mir_domino_active_user', JSON.stringify(cleanUser));
+      setView('menu');
+      playSound('win');
+      setWelcomeMessage(`مرحباً بك، ${cleanUser.name}!`);
+      setTimeout(() => setWelcomeMessage(''), 2000);
+      setIsLoading(false);
+  };
+
+  const syncUserToDb = (updatedUser: UserProfile) => {
+      const safeUsername = updatedUser.name.replace(/[.#$/[\]]/g, '');
+      // We perform a shallow merge or specific update
+      // We need to keep the password, so we don't overwrite the whole node if we don't have it in state
+      // Use update for partials
+      update(ref(db, `users/${safeUsername}`), {
+          globalCoins: updatedUser.globalCoins,
+          level: updatedUser.level,
+          xp: updatedUser.xp,
+          avatar: updatedUser.avatar,
+          settings: updatedUser.settings
+      });
+      localStorage.setItem('mir_domino_active_user', JSON.stringify(updatedUser));
   };
 
   const deleteAccount = () => {
       if (confirm('هل أنت متأكد من حذف الحساب؟ سيتم فقد جميع البيانات.')) {
-          localStorage.removeItem('mir_domino_user');
-          window.location.reload();
+          const safeUsername = user.name.replace(/[.#$/[\]]/g, '');
+          set(ref(db, `users/${safeUsername}`), null).then(() => {
+              localStorage.removeItem('mir_domino_active_user');
+              window.location.reload();
+          });
       }
   };
 
   const logout = () => {
       if(confirm('هل تريد تسجيل الخروج؟')) {
+         localStorage.removeItem('mir_domino_active_user');
          setView('splash');
          setWelcomeMessage('');
+         setUsernameInput('');
+         setPasswordInput('');
       }
   }
-
-  // --- Google Login Simulation ---
-  const handleGoogleLogin = () => {
-      // Mocking Firebase Auth flow
-      const mockName = "لاعب جوجل";
-      const mockAvatar = AVATARS[5];
-      alert("جاري الاتصال بحساب Google...");
-      setTimeout(() => {
-          const newUser = { ...user, name: mockName, avatar: mockAvatar, level: 5 }; // Simulated synced level
-          setUser(newUser);
-          localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
-          setView('menu');
-          playSound('win');
-          setWelcomeMessage(`تم تسجيل الدخول: ${mockName}`);
-          setTimeout(() => setWelcomeMessage(''), 2000);
-      }, 1500);
-  };
 
   // --- Reward Ads Logic ---
   const giveReward = (amount: number) => {
       const newUser = { ...user, globalCoins: user.globalCoins + amount };
       setUser(newUser);
-      localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
+      syncUserToDb(newUser);
       alert("مبروك! تمت إضافة " + amount + " عملة لرصيدك. رصيدك الحالي: " + newUser.globalCoins);
       playSound('win');
   };
@@ -108,17 +211,6 @@ const App: React.FC = () => {
   };
 
   // --- Navigation Handlers ---
-  const enterGame = (name: string) => {
-      if(!name.trim()) return;
-      const newUser = { ...user, name, avatar: AVATARS[selectedAvatarIndex] };
-      setUser(newUser);
-      localStorage.setItem('mir_domino_user', JSON.stringify(newUser));
-      setView('menu');
-      playSound('win');
-      setWelcomeMessage(`مرحباً بك، ${name}!`);
-      setTimeout(() => setWelcomeMessage(''), 2000);
-  };
-
   const handleGameEnd = (winnerIsHuman: boolean, coinReward: number) => {
       const xpGain = winnerIsHuman ? 100 : 20;
       const newXp = user.xp + xpGain;
@@ -132,7 +224,7 @@ const App: React.FC = () => {
       };
 
       setUser(updatedUser);
-      localStorage.setItem('mir_domino_user', JSON.stringify(updatedUser)); 
+      syncUserToDb(updatedUser);
 
       if (newLevel > user.level) {
           playSound('win');
@@ -146,6 +238,15 @@ const App: React.FC = () => {
       }
       
       setView('menu');
+  };
+
+  // This function ensures coin changes are immediately saved to DB
+  const handleUpdateCoins = (amount: number) => {
+      setUser(prev => {
+          const newUser = { ...prev, globalCoins: prev.globalCoins + amount };
+          syncUserToDb(newUser);
+          return newUser;
+      });
   };
 
   const handleExchange = (amount: number) => {
@@ -206,47 +307,66 @@ const App: React.FC = () => {
                   </div>
                   <h1 className="text-3xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-500">دومينو ميرو</h1>
                   
-                  {/* Avatar Selection */}
-                  <div className="mb-4 text-left">
-                      <label className="text-sm text-slate-400 mb-2 block">اختر شكلك:</label>
-                      <div className="grid grid-cols-5 gap-2 bg-slate-900/50 p-2 rounded-lg h-32 overflow-y-auto custom-scroll">
-                          {AVATARS.map((avi, idx) => (
-                              <img 
-                                key={idx} 
-                                src={avi} 
-                                className={`w-10 h-10 rounded-full cursor-pointer transition-all ${selectedAvatarIndex === idx ? 'ring-2 ring-emerald-500 scale-110 bg-white' : 'opacity-50 hover:opacity-100'}`}
-                                onClick={() => setSelectedAvatarIndex(idx)}
-                              />
-                          ))}
+                  {/* Auth Form */}
+                  <div className="space-y-4 text-right">
+                      <div className="flex bg-slate-700/50 p-1 rounded-xl mb-4">
+                          <button onClick={() => setIsRegistering(false)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${!isRegistering ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>تسجيل دخول</button>
+                          <button onClick={() => setIsRegistering(true)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${isRegistering ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إنشاء حساب</button>
                       </div>
+
+                      {isRegistering && (
+                          <div className="mb-4">
+                              <label className="text-xs text-slate-400 mb-2 block">اختر شكلك:</label>
+                              <div className="grid grid-cols-5 gap-2 bg-slate-900/50 p-2 rounded-lg h-24 overflow-y-auto custom-scroll">
+                                  {AVATARS.map((avi, idx) => (
+                                      <img 
+                                        key={idx} 
+                                        src={avi} 
+                                        className={`w-10 h-10 rounded-full cursor-pointer transition-all ${selectedAvatarIndex === idx ? 'ring-2 ring-emerald-500 scale-110 bg-white' : 'opacity-50 hover:opacity-100'}`}
+                                        onClick={() => setSelectedAvatarIndex(idx)}
+                                      />
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      <div>
+                          <label className="text-xs text-slate-300 block mb-1">اسم المستخدم</label>
+                          <div className="flex items-center gap-2 bg-slate-900 border border-slate-600 rounded-xl px-3 py-3">
+                              <User size={18} className="text-slate-400"/>
+                              <input 
+                                className="bg-transparent border-none outline-none text-white w-full"
+                                placeholder="اسم المستخدم"
+                                value={usernameInput}
+                                onChange={(e) => setUsernameInput(e.target.value)}
+                              />
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="text-xs text-slate-300 block mb-1">كلمة المرور</label>
+                          <div className="flex items-center gap-2 bg-slate-900 border border-slate-600 rounded-xl px-3 py-3">
+                              <Lock size={18} className="text-slate-400"/>
+                              <input 
+                                type="password"
+                                className="bg-transparent border-none outline-none text-white w-full"
+                                placeholder="******"
+                                value={passwordInput}
+                                onChange={(e) => setPasswordInput(e.target.value)}
+                              />
+                          </div>
+                      </div>
+
+                      {authError && <div className="text-red-400 text-xs text-center">{authError}</div>}
+                      
+                      <button 
+                        onClick={handleAuth}
+                        disabled={isLoading}
+                        className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="animate-spin"/> : (isRegistering ? 'إنشاء الحساب' : 'دخول')}
+                      </button>
                   </div>
-
-                  <input 
-                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-center text-lg mb-4 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    placeholder="ادخل اسمك"
-                    value={user.name}
-                    onChange={(e) => setUser(prev => ({...prev, name: e.target.value}))}
-                  />
-                  
-                  <button 
-                    onClick={() => enterGame(user.name)}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-3 rounded-xl shadow-lg mb-4"
-                  >
-                    دخول اللعبة
-                  </button>
-
-                  <div className="relative mb-4">
-                      <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-600"></div></div>
-                      <div className="relative flex justify-center text-sm"><span className="px-2 bg-slate-800 text-slate-400">أو</span></div>
-                  </div>
-
-                  <button 
-                    onClick={handleGoogleLogin}
-                    className="w-full bg-white text-slate-900 font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 hover:bg-gray-100"
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.35 0 9.25-3.67 9.25-9.09c0-1.15-.15-1.81-.15-1.81Z"/></svg>
-                    تسجيل الدخول بجوجل
-                  </button>
               </div>
           </div>
       );
@@ -348,13 +468,7 @@ const App: React.FC = () => {
                           <div className="space-y-4">
                               {/* Edit Profile */}
                               <div className="bg-slate-700/50 p-3 rounded-xl">
-                                  <label className="text-xs text-slate-400">تغيير الاسم</label>
-                                  <div className="flex gap-2 mt-1">
-                                      <input className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 text-white" value={user.name} onChange={e => setUser(p => ({...p, name: e.target.value}))}/>
-                                      <Edit2 size={20} className="text-slate-400"/>
-                                  </div>
-                                  
-                                  <label className="text-xs text-slate-400 mt-2 block">تغيير الصورة</label>
+                                  <label className="text-xs text-slate-400">تغيير الصورة</label>
                                   <div className="grid grid-cols-5 gap-2 mt-1 bg-slate-900 p-2 rounded h-24 overflow-y-auto custom-scroll">
                                       {AVATARS.map((avi, idx) => (
                                           <img key={idx} src={avi} onClick={() => setUser(p => ({...p, avatar: avi}))} className={`w-8 h-8 rounded-full cursor-pointer ${user.avatar === avi ? 'ring-2 ring-emerald-500 bg-white' : 'opacity-50'}`}/>
@@ -369,14 +483,7 @@ const App: React.FC = () => {
                                   </button>
                               </div>
 
-                              <div className="flex justify-between items-center bg-slate-700/50 p-3 rounded-xl">
-                                  <span className="flex items-center gap-2"><Smartphone size={20}/> الاهتزاز</span>
-                                  <button onClick={() => setUser(p => ({...p, settings: {...p.settings, vibrationEnabled: !p.settings.vibrationEnabled}}))} className={`w-12 h-6 rounded-full relative transition-colors ${user.settings.vibrationEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}>
-                                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${user.settings.vibrationEnabled ? 'left-1' : 'right-1'}`}></div>
-                                  </button>
-                              </div>
-
-                              <button onClick={saveData} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+                              <button onClick={() => syncUserToDb(user)} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2">
                                   <Save size={20}/> حفظ التغييرات
                               </button>
                               
@@ -447,7 +554,7 @@ const App: React.FC = () => {
 
   if (view.startsWith('lobby_')) return renderLobby(view.split('_')[1] as any);
 
-  if (view === 'game_domino') return <DominoGame user={user} opponentName={opponentName} onEndGame={handleGameEnd} onUpdateCoins={(a) => setUser(prev => ({...prev, globalCoins: prev.globalCoins + a}))} />;
+  if (view === 'game_domino') return <DominoGame user={user} opponentName={opponentName} onEndGame={handleGameEnd} onUpdateCoins={handleUpdateCoins} />;
   if (view === 'game_card') return <CardGame user={user} onEndGame={handleGameEnd} />;
   if (view === 'game_ludo') return <LudoGame user={user} isBot={isBotGame} opponentName={opponentName} onEndGame={handleGameEnd} />;
   if (view === 'game_bank') return <BankGame user={user} isBot={isBotGame} opponentName={opponentName} onEndGame={handleGameEnd} />;

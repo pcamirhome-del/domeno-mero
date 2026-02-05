@@ -23,6 +23,9 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
     timeLeft: 30,
   });
 
+  const [matchScores, setMatchScores] = useState<number[]>([0, 0, 0, 0]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
   const [hasAutoPlay, setHasAutoPlay] = useState(false);
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [showEmotes, setShowEmotes] = useState(false);
@@ -89,7 +92,7 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
           const newDiscard = [...state.discardPile, card];
 
           if (newHand.length === 0) {
-              finishGame(currentPlayer.type === 'human');
+              handleRoundEnd(state.currentTurnIndex);
               return;
           }
 
@@ -135,6 +138,27 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
       }
   };
 
+  const handleRoundEnd = (winnerIndex: number) => {
+      // Calculate points (sum of other players hands)
+      let points = 0;
+      state.players.forEach((p, idx) => {
+          if (idx !== winnerIndex) {
+              points += p.cardHand.reduce((acc, c) => acc + (c.value || 0), 0);
+          }
+      });
+
+      const newScores = [...matchScores];
+      newScores[winnerIndex] += points;
+      setMatchScores(newScores);
+
+      if (newScores[winnerIndex] >= 100) {
+          finishGame(winnerIndex === 0);
+      } else {
+          alert(`${state.players[winnerIndex].name} فاز بالجولة! النقاط: ${points}. النتيجة: ${newScores[0]} - ${newScores[1]} - ${newScores[2]} - ${newScores[3]}`);
+          initGame(); // Next round
+      }
+  };
+
   const toggleAutoPlay = () => {
       if (!hasAutoPlay) {
           if(confirm('شراء اللعب التلقائي بـ 200 عملة؟')) {
@@ -156,6 +180,13 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
   };
 
   // Chat
+  const sendChat = (text: string) => {
+      if (!text.trim()) return;
+      const msg: ChatMessage = { id: Date.now().toString(), sender: user.name, text, type: 'text' };
+      setChatMessages(prev => [...prev, msg]);
+      setChatInput('');
+  };
+
   const sendEmote = (emote: string, isGift = false) => {
       setFloatingEmote({ char: emote, target: isGift ? 'opponent' : 'self' });
       setTimeout(() => setFloatingEmote(null), 2000);
@@ -168,12 +199,19 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
 
   return (
     <div className="flex flex-col h-full bg-green-900 relative overflow-hidden">
+        
+        {/* Score Header */}
+        <div className="absolute top-4 left-4 z-10 bg-black/40 text-white px-2 py-1 rounded text-xs">
+            الهدف: 100 | نتيجتك: <span className="text-yellow-400 font-bold">{matchScores[0]}</span>
+        </div>
+
         {/* Top Opponents */}
-        <div className="flex justify-around pt-4">
+        <div className="flex justify-around pt-8">
              {state.players.slice(1).map((p, i) => (
                  <div key={i} className={`flex flex-col items-center transition-opacity ${state.currentTurnIndex === i+1 ? 'opacity-100 scale-110' : 'opacity-60'}`}>
                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white text-white font-bold">{p.name.charAt(0)}</div>
                      <div className="bg-white/20 px-2 rounded mt-1 text-xs text-white">{p.cardHand.length} كروت</div>
+                     <div className="text-[10px] text-yellow-300">{matchScores[i+1]} pts</div>
                      {floatingEmote?.target === 'opponent' && <div className="absolute text-4xl animate-bounce">🌹</div>}
                  </div>
              ))}
@@ -196,7 +234,7 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
         </div>
 
         {/* Player Hand */}
-        <div className="pb-4 px-4 overflow-x-auto">
+        <div className="pb-20 px-4 overflow-x-auto">
             <div className="flex justify-center -space-x-4 rtl:space-x-reverse min-w-max mx-auto">
                 {state.players[0].cardHand.map((c, i) => (
                     <div key={c.id} className="transition-transform hover:-translate-y-4" onClick={() => state.currentTurnIndex === 0 && playCard(c)}>
@@ -206,24 +244,39 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
             </div>
         </div>
 
-        {/* UI Overlay */}
+        {/* UI Overlay Buttons */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
             <button onClick={() => setShowExitConfirm(true)} className="bg-red-500/20 text-red-200 p-2 rounded-full"><XCircle/></button>
             <button onClick={toggleAutoPlay} className={`p-2 rounded-full ${hasAutoPlay ? (isAutoPlaying ? 'bg-green-500 ring-2 ring-green-300' : 'bg-slate-600') : 'bg-orange-500'}`}>
                 <Zap className="text-white" size={20}/>
             </button>
-            <button onClick={() => setShowEmotes(!showEmotes)} className="p-2 bg-slate-700 rounded-full text-yellow-400"><Smile size={20}/></button>
         </div>
 
-        {/* Chat */}
+        {/* Bottom Left Chat */}
+        <div className="absolute bottom-4 left-4 z-40 w-full max-w-xs flex flex-col gap-2 pointer-events-none">
+             {/* Log */}
+             <div className="flex flex-col-reverse gap-1 items-start h-24 overflow-hidden mb-1 pl-1">
+                {chatMessages.slice(-4).reverse().map((msg, i) => (
+                    <div key={msg.id} className="bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-lg text-xs animate-in slide-in-from-left fade-in">
+                        <span className="font-bold text-emerald-400">{msg.sender}:</span> {msg.text}
+                    </div>
+                ))}
+             </div>
+             {/* Input */}
+             <div className="flex items-center gap-2 pointer-events-auto pr-8">
+                  <div className="flex-1 flex bg-slate-900/90 rounded-full px-3 py-2 items-center border border-slate-700">
+                      <input className="bg-transparent border-none outline-none text-white text-sm flex-1" placeholder="اكتب..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChat(chatInput)} />
+                      <button onClick={() => sendChat(chatInput)} className="text-emerald-400"><Send size={16}/></button>
+                  </div>
+                  <button onClick={() => setShowEmotes(!showEmotes)} className="bg-slate-700 p-2 rounded-full text-yellow-400 hover:bg-slate-600"><Smile size={20}/></button>
+             </div>
+        </div>
+
+        {/* Emotes Modal */}
         {showEmotes && (
-            <div className="absolute bottom-0 inset-x-0 bg-slate-800 p-4 rounded-t-2xl animate-in slide-in-from-bottom z-50">
-                 <div className="flex gap-4 justify-center">
-                     <button onClick={() => sendEmote('🌹', true)} className="text-2xl bg-red-900/50 p-2 rounded">🌹</button>
-                     <button onClick={() => sendEmote('😂')} className="text-2xl">😂</button>
-                     <button onClick={() => sendEmote('😡')} className="text-2xl">😡</button>
-                     <button onClick={() => setShowEmotes(false)} className="text-sm text-red-400">إغلاق</button>
-                 </div>
+            <div className="absolute bottom-16 left-4 bg-slate-800 p-2 rounded-xl grid grid-cols-4 gap-2 shadow-2xl z-50 animate-in slide-in-from-bottom">
+                 {['🌹','😂','😡','👍'].map(e => <button key={e} onClick={() => sendEmote(e)} className="text-2xl hover:scale-110 transition-transform">{e}</button>)}
+                 <button onClick={() => setShowEmotes(false)} className="col-span-4 text-xs text-red-400 mt-1">إغلاق</button>
             </div>
         )}
 
@@ -248,7 +301,7 @@ export const CardGame: React.FC<CardGameProps> = ({ user, onEndGame }) => {
                     {showTrophy === 'gold' ? (
                         <>
                             <Trophy size={100} className="mx-auto text-yellow-400 animate-bounce mb-4" />
-                            <h2 className="text-4xl font-black text-yellow-300 mb-2">الفائز!</h2>
+                            <h2 className="text-4xl font-black text-yellow-300 mb-2">الفائز بالمباراة!</h2>
                         </>
                     ) : (
                         <>
